@@ -1,10 +1,24 @@
+import 'package:ecommerce/components/header/header.dart';
+import 'package:ecommerce/features/report/view/report_controller.dart';
 import 'package:flutter/material.dart';
 
 class ReportView extends StatelessWidget {
-  const ReportView({super.key});
+  final ReportController controller;
+
+  const ReportView({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('Relatório'));
+   return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 10),
+      child: Column(
+        children: [
+          Header(
+            title: controller.headerTitle,
+            subtitle: controller.headerSubtitle
+          ),
+        ],
+      ),
+    );
   }
 }

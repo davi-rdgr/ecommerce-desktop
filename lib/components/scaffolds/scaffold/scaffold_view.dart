@@ -1,6 +1,7 @@
 import 'package:ecommerce/components/scaffolds/scaffold/scaffold_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:signals_flutter/signals_flutter.dart';
 
 class ScaffoldView extends StatefulWidget {
   final ScaffoldController controller;
@@ -25,12 +26,9 @@ class _ScaffoldViewState extends State<ScaffoldView> {
       backgroundColor: const Color(0xFFF5F0EB),
       body: Row(
         children: [
-          ListenableBuilder(
-            listenable: widget.controller,
-            builder: (context, _) => SizedBox(
-              width: _sidebarWidth,
-              child: _Sidebar(controller: widget.controller),
-            ),
+          SizedBox(
+            width: _sidebarWidth,
+            child: _Sidebar(controller: widget.controller),
           ),
           MouseRegion(
             cursor: SystemMouseCursors.resizeColumn,
@@ -47,10 +45,9 @@ class _ScaffoldViewState extends State<ScaffoldView> {
             ),
           ),
           Expanded(
-            child: ListenableBuilder(
-              listenable: widget.controller,
-              builder: (context, _) => IndexedStack(
-                index: widget.controller.pageIndex,
+            child: SignalBuilder(
+              builder: (context) => IndexedStack(
+                index: widget.controller.pageIndex.value,
                 children: widget.pages,
               ),
             ),
@@ -61,7 +58,7 @@ class _ScaffoldViewState extends State<ScaffoldView> {
   }
 }
 
-class _Sidebar extends StatelessWidget {
+class _Sidebar extends SignalWidget {
   final ScaffoldController controller;
 
   const _Sidebar({required this.controller});
@@ -71,6 +68,10 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pageIdx = controller.pageIndex.value;
+    final pendingCount = controller.pendingOrdersCount.value;
+    final isOpen = controller.isStoreOpen.value;
+
     return Container(
       color: _bgColor,
       child: Column(
@@ -81,15 +82,14 @@ class _Sidebar extends StatelessWidget {
           _buildNavItem(
             'Pedidos',
             0,
-            badge: controller.pendingOrdersCount > 0
-                ? controller.pendingOrdersCount
-                : null,
+            pageIdx,
+            badge: pendingCount > 0 ? pendingCount : null,
           ),
-          _buildNavItem('Cardápio', 1),
-          _buildNavItem('Loja', 2),
-          _buildNavItem('Relatório', 3),
+          _buildNavItem('Cardápio', 1, pageIdx),
+          _buildNavItem('Loja', 2, pageIdx),
+          _buildNavItem('Relatório', 3, pageIdx),
           const Spacer(),
-          _buildStoreToggle(),
+          _buildStoreToggle(isOpen),
         ],
       ),
     );
@@ -158,8 +158,8 @@ class _Sidebar extends StatelessWidget {
     );
   }
 
-  Widget _buildNavItem(String label, int index, {int? badge}) {
-    final isActive = controller.pageIndex == index;
+  Widget _buildNavItem(String label, int index, int pageIdx, {int? badge}) {
+    final isActive = pageIdx == index;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 3),
@@ -230,8 +230,7 @@ class _Sidebar extends StatelessWidget {
     );
   }
 
-  Widget _buildStoreToggle() {
-    final isOpen = controller.isStoreOpen;
+  Widget _buildStoreToggle(bool isOpen) {
     final statusColor = isOpen
         ? const Color(0xFF36D17A)
         : const Color(0xFFE07A6B);

@@ -1,9 +1,9 @@
 import 'package:ecommerce/components/scaffolds/scaffold/scaffold_view.dart';
 import 'package:ecommerce/core/di/app_dependencies.dart';
-import 'package:ecommerce/features/home/view/home_view.dart';
-import 'package:ecommerce/features/menu/view/menu_view.dart';
-import 'package:ecommerce/features/report/view/report_view.dart';
-import 'package:ecommerce/features/shop/view/shop_view.dart';
+import 'package:ecommerce/features/home/view/home_route.dart';
+import 'package:ecommerce/features/menu/view/menu_route.dart';
+import 'package:ecommerce/features/report/view/report_route.dart';
+import 'package:ecommerce/features/shop/view/shop_route.dart';
 import 'package:flutter/material.dart';
 
 class AppShell extends StatelessWidget {
@@ -14,10 +14,10 @@ class AppShell extends StatelessWidget {
     return ScaffoldView(
       controller: deps.scaffoldFullDependencies.scaffold,
       pages: const [
-        HomeView(),
-        MenuView(),
-        ShopView(),
-        ReportView(),
+        HomeRoute(),
+        MenuRoute(),
+        ShopRoute(),
+        ReportRoute(),
       ],
     );
   }

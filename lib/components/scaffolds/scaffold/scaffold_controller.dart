@@ -1,28 +1,22 @@
-import 'package:flutter/foundation.dart';
+import 'package:signals_flutter/signals_flutter.dart';
 
-class ScaffoldController extends ChangeNotifier {
-  int _pageIndex = 0;
-  int _pendingOrdersCount = 0;
-  bool _isStoreOpen = true;
-
-  int get pageIndex => _pageIndex;
-  int get pendingOrdersCount => _pendingOrdersCount;
-  bool get isStoreOpen => _isStoreOpen;
+class ScaffoldController {
+  final pageIndex = signal(0);
+  final pendingOrdersCount = signal(0);
+  final isStoreOpen = signal(true);
 
   void goTo(int index) {
-    if (_pageIndex == index) return;
-    _pageIndex = index;
-    notifyListeners();
+    if (pageIndex.value == index) return;
+    pageIndex.value = index;
   }
 
-  void setPendingOrdersCount(int count) {
-    if (_pendingOrdersCount == count) return;
-    _pendingOrdersCount = count;
-    notifyListeners();
-  }
+  void setPendingOrdersCount(int count) => pendingOrdersCount.value = count;
 
-  void toggleStore() {
-    _isStoreOpen = !_isStoreOpen;
-    notifyListeners();
+  void toggleStore() => isStoreOpen.value = !isStoreOpen.value;
+
+  void dispose() {
+    pageIndex.dispose();
+    pendingOrdersCount.dispose();
+    isStoreOpen.dispose();
   }
 }
