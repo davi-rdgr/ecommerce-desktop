@@ -41,7 +41,7 @@ class _ScaffoldViewState extends State<ScaffoldView> {
                   );
                 });
               },
-              child: Container(width: 6, color: Colors.transparent),
+              child: Container(width: 1, color: Colors.transparent),
             ),
           ),
           Expanded(
