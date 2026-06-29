@@ -1,5 +1,5 @@
-import 'package:ecommerce/features/menu/view/menu_controller.dart';
-import 'package:ecommerce/features/menu/view/menu_view.dart';
+import 'package:romeu_lanches_admin/features/menu/view/menu_controller.dart';
+import 'package:romeu_lanches_admin/features/menu/view/menu_view.dart';
 import 'package:flutter/material.dart' hide MenuController;
 
 class MenuRoute extends StatefulWidget {

@@ -1,29 +1,11 @@
-import 'package:ecommerce/features/home/view/home_controller.dart';
-import 'package:ecommerce/features/home/view/home_view.dart';
+import 'package:romeu_lanches_admin/core/di/app_dependencies.dart';
+import 'package:romeu_lanches_admin/features/home/view/home_view.dart';
 import 'package:flutter/material.dart';
 
-class HomeRoute extends StatefulWidget {
+class HomeRoute extends StatelessWidget {
   const HomeRoute({super.key});
 
   @override
-  State<HomeRoute> createState() => _HomeRouteState();
-}
-
-class _HomeRouteState extends State<HomeRoute> {
-  late final HomeController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = HomeController();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => HomeView(controller: _controller);
+  Widget build(BuildContext context) =>
+      HomeView(controller: deps.homeFullDependencies.home);
 }

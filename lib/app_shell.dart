@@ -1,9 +1,9 @@
-import 'package:ecommerce/components/scaffolds/scaffold/scaffold_view.dart';
-import 'package:ecommerce/core/di/app_dependencies.dart';
-import 'package:ecommerce/features/home/view/home_route.dart';
-import 'package:ecommerce/features/menu/view/menu_route.dart';
-import 'package:ecommerce/features/report/view/report_route.dart';
-import 'package:ecommerce/features/shop/view/shop_route.dart';
+import 'package:romeu_lanches_admin/components/scaffolds/scaffold/scaffold_view.dart';
+import 'package:romeu_lanches_admin/core/di/app_dependencies.dart';
+import 'package:romeu_lanches_admin/features/home/view/home_route.dart';
+import 'package:romeu_lanches_admin/features/menu/view/menu_route.dart';
+import 'package:romeu_lanches_admin/features/report/view/report_route.dart';
+import 'package:romeu_lanches_admin/features/shop/view/shop_route.dart';
 import 'package:flutter/material.dart';
 
 class AppShell extends StatelessWidget {

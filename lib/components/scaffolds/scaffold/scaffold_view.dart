@@ -1,4 +1,4 @@
-import 'package:ecommerce/components/scaffolds/scaffold/scaffold_controller.dart';
+import 'package:romeu_lanches_admin/components/scaffolds/scaffold/scaffold_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:signals_flutter/signals_flutter.dart';

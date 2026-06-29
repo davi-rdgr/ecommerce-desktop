@@ -1,5 +1,5 @@
-import 'package:ecommerce/features/home/data/order_status.dart';
-import 'package:ecommerce/models/order.dart';
+import 'package:romeu_lanches_admin/features/home/data/order_status.dart';
+import 'package:romeu_lanches_admin/models/order.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 

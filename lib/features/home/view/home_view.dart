@@ -1,7 +1,7 @@
-import 'package:ecommerce/components/header/header.dart';
-import 'package:ecommerce/features/home/components/home_column.dart';
-import 'package:ecommerce/features/home/components/home_stats.dart';
-import 'package:ecommerce/features/home/view/home_controller.dart';
+import 'package:romeu_lanches_admin/components/header/header.dart';
+import 'package:romeu_lanches_admin/features/home/components/home_column.dart';
+import 'package:romeu_lanches_admin/features/home/components/home_stats.dart';
+import 'package:romeu_lanches_admin/features/home/view/home_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 

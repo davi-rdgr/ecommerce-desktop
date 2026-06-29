@@ -1,5 +1,5 @@
-import 'package:ecommerce/features/home/data/order_status.dart';
-import 'package:ecommerce/models/order.dart';
+import 'package:romeu_lanches_admin/features/home/data/order_status.dart';
+import 'package:romeu_lanches_admin/models/order.dart';
 import 'package:flutter/material.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 
@@ -31,6 +31,10 @@ class HomeController {
           color: Color(0xFF1B9E54),
         ),
       ];
+
+  late final activeOrders = computed(
+    () => orders.value.where((o) => o.status != OrderStatus.finished).length,
+  );
 
   late final homeStats = computed(() {
     final all = orders.value;
@@ -145,6 +149,7 @@ class HomeController {
   void dispose() {
     isLoading.dispose();
     orders.dispose();
+    activeOrders.dispose();
     homeStats.dispose();
   }
 }

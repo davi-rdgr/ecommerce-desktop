@@ -1,4 +1,4 @@
-import 'package:ecommerce/components/scaffolds/scaffold/scaffold_controller.dart';
+import 'package:romeu_lanches_admin/components/scaffolds/scaffold/scaffold_controller.dart';
 
 class ScaffoldFullDependencies {
   late final ScaffoldController scaffold;

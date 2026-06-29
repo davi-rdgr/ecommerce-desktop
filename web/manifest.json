@@ -1,6 +1,6 @@
 {
-    "name": "ecommerce",
-    "short_name": "ecommerce",
+    "name": "romeu_lanches_admin",
+    "short_name": "romeu_lanches_admin",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

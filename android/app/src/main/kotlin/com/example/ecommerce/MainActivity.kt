@@ -1,4 +1,4 @@
-package com.example.ecommerce
+package com.example.romeu_lanches_admin
 
 import io.flutter.embedding.android.FlutterActivity
 
