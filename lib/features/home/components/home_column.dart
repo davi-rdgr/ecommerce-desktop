@@ -7,12 +7,22 @@ class HomeColumn extends StatelessWidget {
   final String label;
   final Color color;
   final List<Order> orders;
+  final void Function(Order order) onOrderTap;
+  final void Function(Order order) onAdvance;
+  final void Function(Order order) onCancel;
+
+  /// Pedidos com transição em voo.
+  final Set<String> pendingIds;
 
   const HomeColumn({
     super.key,
     required this.label,
     required this.color,
     required this.orders,
+    required this.onOrderTap,
+    required this.onAdvance,
+    required this.onCancel,
+    required this.pendingIds,
   });
 
   @override
@@ -89,7 +99,13 @@ class HomeColumn extends StatelessWidget {
                   child: Column(
                     children: [
                       for (int i = 0; i < orders.length; i++) ...[
-                        HomeCard(order: orders[i]),
+                        HomeCard(
+                          order: orders[i],
+                          onTap: () => onOrderTap(orders[i]),
+                          onAdvance: () => onAdvance(orders[i]),
+                          onCancel: () => onCancel(orders[i]),
+                          isBusy: pendingIds.contains(orders[i].id),
+                        ),
                         if (i < orders.length - 1) const SizedBox(height: 10),
                       ],
                     ],

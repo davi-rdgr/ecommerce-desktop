@@ -1,32 +1,52 @@
-import 'package:romeu_lanches_admin/features/home/data/order_status.dart';
+import 'package:romeu_lanches_admin/core/format/currency.dart';
+import 'package:romeu_lanches_admin/models/delivery_type.dart';
 import 'package:romeu_lanches_admin/models/order.dart';
+import 'package:romeu_lanches_admin/models/order_status.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class HomeCard extends StatelessWidget {
   final Order order;
 
-  const HomeCard({super.key, required this.order});
+  /// Abre o detalhe do pedido — a lista não traz os itens.
+  final VoidCallback onTap;
+
+  /// Manda o pedido para a próxima etapa (aceitar / pronto / concluir).
+  final VoidCallback onAdvance;
+
+  final VoidCallback onCancel;
+
+  /// Transição em voo — trava os botões contra clique duplo.
+  final bool isBusy;
+
+  const HomeCard({
+    super.key,
+    required this.order,
+    required this.onTap,
+    required this.onAdvance,
+    required this.onCancel,
+    required this.isBusy,
+  });
 
   String get _timeAgo {
     final diff = DateTime.now().difference(order.createdAt).inMinutes;
     return 'há $diff min';
   }
 
-  String get _productsText {
-    final counts = <String, int>{};
-    for (final p in order.products) {
-      counts[p] = (counts[p] ?? 0) + 1;
-    }
-    return counts.entries.map((e) => '${e.value}x ${e.key}').join(', ');
-  }
+  String get _itemsText =>
+      '${order.itemCount} ${order.itemCount == 1 ? 'item' : 'itens'}';
 
-  String get _priceText {
-    return 'R\$ ${order.price.toStringAsFixed(2).replaceAll('.', ',')}';
-  }
+  String get _priceText => brl(order.price);
 
   @override
   Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(onTap: onTap, child: _buildCard()),
+    );
+  }
+
+  Widget _buildCard() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
@@ -39,7 +59,7 @@ class HomeCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '#${order.id}',
+                '#${order.number}',
                 style: GoogleFonts.bricolageGrotesque(
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
@@ -59,9 +79,9 @@ class HomeCard extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              _Badge(label: order.deliveryMethod),
+              _Badge(label: order.deliveryType.label),
               const SizedBox(width: 5),
-              _Badge(label: order.paymentMethod),
+              _Badge(label: order.paymentMethod.label),
             ],
           ),
           const SizedBox(height: 8),
@@ -79,7 +99,7 @@ class HomeCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  _productsText,
+                  _itemsText,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w400,
@@ -117,7 +137,7 @@ class HomeCard extends StatelessWidget {
             MouseRegion(
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
-                onTap: () {},
+                onTap: isBusy ? null : onCancel,
                 child: Container(
                   width: 30,
                   height: 30,
@@ -134,15 +154,36 @@ class HomeCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            _ActionButton(label: 'Aceitar', backgroundColor: const Color(0XFF1B9E54)),
+            _ActionButton(
+              label: 'Aceitar',
+              backgroundColor: const Color(0XFF1B9E54),
+              onPressed: onAdvance,
+              isBusy: isBusy,
+            ),
           ],
         );
       case OrderStatus.inProgress:
-        final label = order.deliveryMethod == 'Entrega' ? 'Saiu p/ entrega' : 'Pronto';
-        return _ActionButton(label: label, backgroundColor: const Color(0XFF3B82F6));
+        final label = order.deliveryType == DeliveryType.delivery
+            ? 'Saiu p/ entrega'
+            : 'Pronto';
+        return _ActionButton(
+          label: label,
+          backgroundColor: const Color(0XFF3B82F6),
+          onPressed: onAdvance,
+          isBusy: isBusy,
+        );
       case OrderStatus.ready:
-        return _ActionButton(label: 'Concluir', backgroundColor: const Color(0XFF2A1F17));
+        return _ActionButton(
+          label: 'Concluir',
+          backgroundColor: const Color(0XFF2A1F17),
+          onPressed: onAdvance,
+          isBusy: isBusy,
+        );
+      // Concluído não tem próxima ação. Aguardando pagamento e cancelado nunca
+      // chegam a ser renderizados — não têm coluna no kanban.
       case OrderStatus.finished:
+      case OrderStatus.awaitingPayment:
+      case OrderStatus.canceled:
         return const SizedBox.shrink();
     }
   }
@@ -151,14 +192,23 @@ class HomeCard extends StatelessWidget {
 class _ActionButton extends StatelessWidget {
   final String label;
   final Color backgroundColor;
+  final VoidCallback onPressed;
+  final bool isBusy;
 
-  const _ActionButton({required this.label, required this.backgroundColor});
+  const _ActionButton({
+    required this.label,
+    required this.backgroundColor,
+    required this.onPressed,
+    required this.isBusy,
+  });
 
   @override
   Widget build(BuildContext context) {
     return ElevatedButton(
-      onPressed: () {},
+      onPressed: isBusy ? null : onPressed,
       style: ElevatedButton.styleFrom(
+        disabledBackgroundColor: backgroundColor.withValues(alpha: 0.45),
+        disabledForegroundColor: Colors.white,
         enabledMouseCursor: SystemMouseCursors.click,
         foregroundColor: const Color(0XFFFFFFFF),
         backgroundColor: backgroundColor,
