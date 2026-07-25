@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'app_shell.dart';
+import 'core/navigation/fade_route.dart';
+import 'features/login/view/login_route.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -33,14 +34,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     Future.delayed(const Duration(milliseconds: 2200), () {
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 400),
-          pageBuilder: (_, _, _) => const AppShell(),
-          transitionsBuilder: (_, animation, _, child) =>
-              FadeTransition(opacity: animation, child: child),
-        ),
-      );
+      Navigator.of(context).pushReplacement(fadeRoute(const LoginRoute()));
     });
   }
 
