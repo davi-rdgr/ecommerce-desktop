@@ -2,6 +2,7 @@ import 'package:romeu_lanches_admin/components/header/header.dart';
 import 'package:romeu_lanches_admin/features/home/components/home_column.dart';
 import 'package:romeu_lanches_admin/features/home/components/home_stats.dart';
 import 'package:romeu_lanches_admin/features/home/components/order_detail_dialog.dart';
+import 'package:romeu_lanches_admin/features/home/data/orders_realtime.dart';
 import 'package:romeu_lanches_admin/features/home/view/home_controller.dart';
 import 'package:romeu_lanches_admin/models/order.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +27,7 @@ class _HomeViewState extends State<HomeView> {
   void initState() {
     super.initState();
     _controller.loadOrders();
+    _controller.startRealtime();
   }
 
   @override
@@ -149,6 +151,10 @@ class _HomeViewState extends State<HomeView> {
                           ),
                         ),
                         const Spacer(),
+                        _RealtimeBadge(
+                          status: _controller.realtimeStatus.value,
+                        ),
+                        const SizedBox(width: 12),
                         _RefreshButton(
                           isLoading: _controller.isLoading.value,
                           onPressed: _controller.loadOrders,
@@ -210,6 +216,50 @@ class _HomeViewState extends State<HomeView> {
                   ))
               .toList(),
         ),
+      ),
+    );
+  }
+}
+
+/// Sem isso, canal caído é indistinguível de noite fraca: a tela fica parada
+/// e ninguém sabe se é falta de pedido ou falta de conexão.
+class _RealtimeBadge extends StatelessWidget {
+  final RealtimeStatus status;
+
+  const _RealtimeBadge({required this.status});
+
+  static const _colors = <RealtimeStatus, Color>{
+    RealtimeStatus.live: Color(0xFF1B9E54),
+    RealtimeStatus.connecting: Color(0xFFF59E0B),
+    RealtimeStatus.offline: Color(0xFF998875),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _colors[status]!;
+
+    return Tooltip(
+      message: status == RealtimeStatus.live
+          ? 'Pedidos novos chegam sozinhos'
+          : 'O painel pode estar desatualizado — use Atualizar',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            status.label,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }

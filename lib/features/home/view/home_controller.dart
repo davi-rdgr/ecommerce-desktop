@@ -1,5 +1,6 @@
 import 'package:romeu_lanches_admin/core/network/api_exception.dart';
 import 'package:romeu_lanches_admin/features/home/data/order_service.dart';
+import 'package:romeu_lanches_admin/features/home/data/orders_realtime.dart';
 import 'package:romeu_lanches_admin/models/order.dart';
 import 'package:romeu_lanches_admin/models/order_detail.dart';
 import 'package:romeu_lanches_admin/models/order_status.dart';
@@ -8,8 +9,19 @@ import 'package:signals_flutter/signals_flutter.dart';
 
 class HomeController {
   final OrderService _service;
+  final OrdersRealtime _realtime;
 
-  HomeController(this._service);
+  HomeController(this._service, this._realtime) {
+    _realtime.onOrderChanged = _applyRealtimeOrder;
+    _realtime.onResync = loadOrders;
+  }
+
+  /// Estado do canal de tempo real, exibido no painel.
+  Signal<RealtimeStatus> get realtimeStatus => _realtime.status;
+
+  void startRealtime() => _realtime.start();
+
+  void stopRealtime() => _realtime.stop();
 
   final isLoading = signal(false);
   final loadError = signal<String?>(null);
@@ -141,6 +153,31 @@ class HomeController {
     }
   }
 
+  /// Aplica um pedido vindo do WebSocket.
+  ///
+  /// É um upsert de propósito: `PEDIDO_CRIADO` e `STATUS_ATUALIZADO` caem os
+  /// dois aqui, e a transição que nós mesmos disparamos volta como evento
+  /// pouco depois. Sem upsert, isso viraria card duplicado.
+  void _applyRealtimeOrder(Order order) {
+    final current = orders.value;
+    final index = current.indexWhere((o) => o.id == order.id);
+
+    // Sem coluna para ele: cancelado, PIX ainda não pago, ou concluído de um
+    // dia anterior. Se estava na tela, sai.
+    final belongsOnBoard =
+        order.status.isOnBoard &&
+        (order.status != OrderStatus.finished || _isToday(order.createdAt));
+
+    if (!belongsOnBoard) {
+      if (index >= 0) orders.value = [...current]..removeAt(index);
+      return;
+    }
+
+    orders.value = index >= 0
+        ? ([...current]..[index] = order)
+        : [...current, order];
+  }
+
   /// O PATCH devolve o pedido atualizado, então dá para mexer só nele em vez
   /// de recarregar as 4 colunas a cada clique.
   ///
@@ -156,6 +193,7 @@ class HomeController {
   }
 
   void dispose() {
+    _realtime.dispose();
     isLoading.dispose();
     loadError.dispose();
     orders.dispose();

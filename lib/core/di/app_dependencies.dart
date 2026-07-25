@@ -24,13 +24,16 @@ class AppDependencies {
     apiClient = ApiClient(session);
     scaffoldFullDependencies = ScaffoldFullDependencies();
     loginFullDependencies = LoginFullDependencies(apiClient, session);
-    homeFullDependencies = HomeFullDependencies(apiClient);
+    homeFullDependencies = HomeFullDependencies(apiClient, session);
     shopFullDependencies = ShopFullDependencies(scaffoldFullDependencies.scaffold);
 
     // Sessão derrubada no meio do turno (backend reiniciado, JWT_SECRET novo):
     // volta pro login em vez de deixar a tela quebrando em silêncio.
     apiClient.onUnauthorized = () {
       session.clear();
+      // Sem token o canal só ficaria tentando reconectar e sendo recusado
+      // no CONNECT.
+      homeFullDependencies.home.stopRealtime();
       navigatorKey.currentState?.pushAndRemoveUntil(
         fadeRoute(const LoginRoute()),
         (_) => false,
