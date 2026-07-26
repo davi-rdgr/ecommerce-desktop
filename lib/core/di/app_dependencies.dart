@@ -1,6 +1,8 @@
 import 'package:romeu_lanches_admin/core/auth/auth_session.dart';
 import 'package:romeu_lanches_admin/core/di/home_full_dependencies.dart';
 import 'package:romeu_lanches_admin/core/di/login_full_dependencies.dart';
+import 'package:romeu_lanches_admin/core/di/menu_full_dependencies.dart';
+import 'package:romeu_lanches_admin/core/di/report_full_dependencies.dart';
 import 'package:romeu_lanches_admin/core/di/scaffold_full_dependencies.dart';
 import 'package:romeu_lanches_admin/core/di/shop_full_dependencies.dart';
 import 'package:romeu_lanches_admin/core/navigation/app_navigator.dart';
@@ -17,7 +19,9 @@ class AppDependencies {
   late final ScaffoldFullDependencies scaffoldFullDependencies;
   late final LoginFullDependencies loginFullDependencies;
   late final HomeFullDependencies homeFullDependencies;
+  late final MenuFullDependencies menuFullDependencies;
   late final ShopFullDependencies shopFullDependencies;
+  late final ReportFullDependencies reportFullDependencies;
 
   AppDependencies() {
     session = AuthSession();
@@ -25,7 +29,12 @@ class AppDependencies {
     scaffoldFullDependencies = ScaffoldFullDependencies();
     loginFullDependencies = LoginFullDependencies(apiClient, session);
     homeFullDependencies = HomeFullDependencies(apiClient, session);
-    shopFullDependencies = ShopFullDependencies(scaffoldFullDependencies.scaffold);
+    menuFullDependencies = MenuFullDependencies(apiClient);
+    shopFullDependencies = ShopFullDependencies(
+      apiClient,
+      scaffoldFullDependencies.scaffold,
+    );
+    reportFullDependencies = ReportFullDependencies(apiClient);
 
     // Sessão derrubada no meio do turno (backend reiniciado, JWT_SECRET novo):
     // volta pro login em vez de deixar a tela quebrando em silêncio.
