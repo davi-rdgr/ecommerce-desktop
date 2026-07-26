@@ -1,29 +1,11 @@
-import 'package:romeu_lanches_admin/features/menu/view/menu_controller.dart';
+import 'package:romeu_lanches_admin/core/di/app_dependencies.dart';
 import 'package:romeu_lanches_admin/features/menu/view/menu_view.dart';
-import 'package:flutter/material.dart' hide MenuController;
+import 'package:flutter/material.dart';
 
-class MenuRoute extends StatefulWidget {
+class MenuRoute extends StatelessWidget {
   const MenuRoute({super.key});
 
   @override
-  State<MenuRoute> createState() => _MenuRouteState();
-}
-
-class _MenuRouteState extends State<MenuRoute> {
-  late final MenuController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = MenuController();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => MenuView(controller: _controller);
+  Widget build(BuildContext context) =>
+      MenuView(controller: deps.menuFullDependencies.menu);
 }
