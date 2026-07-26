@@ -71,6 +71,8 @@ class _Sidebar extends SignalWidget {
     final pageIdx = controller.pageIndex.value;
     final pendingCount = controller.pendingOrdersCount.value;
     final isOpen = controller.isStoreOpen.value;
+    final isBusy = controller.isStoreBusy.value;
+    final isKnown = controller.isStoreKnown.value;
 
     return Container(
       color: _bgColor,
@@ -89,7 +91,7 @@ class _Sidebar extends SignalWidget {
           _buildNavItem('Loja', 2, pageIdx),
           _buildNavItem('Relatório', 3, pageIdx),
           const Spacer(),
-          _buildStoreToggle(isOpen),
+          _buildStoreToggle(isOpen, isBusy, isKnown),
         ],
       ),
     );
@@ -230,10 +232,12 @@ class _Sidebar extends SignalWidget {
     );
   }
 
-  Widget _buildStoreToggle(bool isOpen) {
-    final statusColor = isOpen
-        ? const Color(0xFF36D17A)
-        : const Color(0xFFE07A6B);
+  Widget _buildStoreToggle(bool isOpen, bool isBusy, bool isKnown) {
+    // Enquanto o estado real não chegou, o controle fica neutro e inerte.
+    final statusColor = !isKnown
+        ? const Color(0xFF8A7C71)
+        : (isOpen ? const Color(0xFF36D17A) : const Color(0xFFE07A6B));
+    final statusLabel = !isKnown ? 'Carregando…' : (isOpen ? 'Aberta' : 'Fechada');
 
     return Container(
       decoration: BoxDecoration(
@@ -277,7 +281,7 @@ class _Sidebar extends SignalWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      isOpen ? 'Aberta' : 'Fechada',
+                      statusLabel,
                       style: GoogleFonts.plusJakartaSans(
                         color: statusColor,
                         fontSize: 12,
@@ -289,40 +293,55 @@ class _Sidebar extends SignalWidget {
               ],
             ),
             const Spacer(),
-            MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                onTap: controller.toggleStore,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 36,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    color: isOpen
-                        ? const Color(0xFF4CAF50)
-                        : Colors.white.withValues(alpha: 0.2),
-                  ),
-                  child: AnimatedAlign(
-                    duration: const Duration(milliseconds: 200),
-                    alignment: isOpen
-                        ? Alignment.centerRight
-                        : Alignment.centerLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.all(2),
-                      child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white,
+            if (isBusy)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            else
+              Opacity(
+                opacity: isKnown ? 1 : 0.4,
+                child: MouseRegion(
+                  cursor: isKnown
+                      ? SystemMouseCursors.click
+                      : SystemMouseCursors.basic,
+                  child: GestureDetector(
+                    onTap: controller.toggleStore,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 36,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        color: isOpen
+                            ? const Color(0xFF4CAF50)
+                            : Colors.white.withValues(alpha: 0.2),
+                      ),
+                      child: AnimatedAlign(
+                        duration: const Duration(milliseconds: 200),
+                        alignment: isOpen
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Container(
+                            width: 16,
+                            height: 16,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

@@ -1,58 +1,71 @@
 import 'package:romeu_lanches_admin/components/scaffolds/scaffold/scaffold_controller.dart';
+import 'package:romeu_lanches_admin/core/navigation/app_messenger.dart';
+import 'package:romeu_lanches_admin/core/network/api_exception.dart';
+import 'package:romeu_lanches_admin/features/shop/data/store_service.dart';
+import 'package:romeu_lanches_admin/models/store_config.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 
-class DaySchedule {
-  final String name;
-  final Signal<bool> enabled;
-  final String openTime;
-  final String closeTime;
-
-  DaySchedule({
-    required this.name,
-    required this.enabled,
-    required this.openTime,
-    required this.closeTime,
-  });
-
-  void dispose() => enabled.dispose();
-}
-
 class ShopController {
+  final StoreService _service;
   final ScaffoldController _scaffold;
 
-  ShopController(this._scaffold);
-
-  Signal<bool> get isStoreOpen => _scaffold.isStoreOpen;
-  void toggleStore() => _scaffold.toggleStore();
+  ShopController(this._service, this._scaffold) {
+    _scaffold.onToggleStore = toggleStore;
+  }
 
   final headerTitle = 'Loja';
   final headerSubtitle = 'Funcionamento, entrega e pagamentos';
 
-  late final schedule = [
-    DaySchedule(name: 'Domingo', enabled: signal(true),  openTime: '18:30', closeTime: '23:30'),
-    DaySchedule(name: 'Segunda', enabled: signal(false), openTime: '18:30', closeTime: '23:30'),
-    DaySchedule(name: 'Terça',   enabled: signal(true),  openTime: '18:30', closeTime: '23:30'),
-    DaySchedule(name: 'Quarta',  enabled: signal(true),  openTime: '18:30', closeTime: '23:30'),
-    DaySchedule(name: 'Quinta',  enabled: signal(true),  openTime: '18:30', closeTime: '23:30'),
-    DaySchedule(name: 'Sexta',   enabled: signal(true),  openTime: '18:30', closeTime: '00:00'),
-    DaySchedule(name: 'Sábado',  enabled: signal(true),  openTime: '18:30', closeTime: '00:00'),
-  ];
+  final config = signal<StoreConfig?>(null);
+  final isLoading = signal(false);
+  final loadError = signal<String?>(null);
 
-  final deliveryFee = signal(6.0);
-  final estimatedTime = signal(40);
+  Signal<bool> get isStoreOpen => _scaffold.isStoreOpen;
+  Signal<bool> get isStoreBusy => _scaffold.isStoreBusy;
 
-  final pixEnabled = signal(true);
-  final creditCardEnabled = signal(true);
-  final cashEnabled = signal(true);
+  Future<void> load() async {
+    isLoading.value = true;
+    loadError.value = null;
+
+    try {
+      _apply(await _service.load());
+    } on ApiException catch (e) {
+      loadError.value = e.message;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Disparado tanto pelo card da tela quanto pelo toggle da sidebar. Como a
+  /// sidebar não pertence a nenhuma view, o erro sai por [showAppMessage].
+  Future<void> toggleStore() async {
+    if (_scaffold.isStoreBusy.value) return;
+    _scaffold.setStoreBusy(true);
+
+    final target = !_scaffold.isStoreOpen.value;
+
+    try {
+      _apply(await _service.setOpen(target));
+      showAppMessage(
+        target
+            ? 'Loja aberta — recebendo pedidos.'
+            : 'Loja fechada — novos pedidos serão recusados.',
+      );
+    } on ApiException catch (e) {
+      showAppMessage(e.message);
+    } finally {
+      _scaffold.setStoreBusy(false);
+    }
+  }
+
+  void _apply(StoreConfig value) {
+    config.value = value;
+    _scaffold.setStoreOpen(value.open);
+  }
 
   void dispose() {
-    for (final d in schedule) {
-      d.dispose();
-    }
-    deliveryFee.dispose();
-    estimatedTime.dispose();
-    pixEnabled.dispose();
-    creditCardEnabled.dispose();
-    cashEnabled.dispose();
+    config.dispose();
+    isLoading.dispose();
+    loadError.dispose();
   }
 }
