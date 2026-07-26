@@ -1,6 +1,7 @@
 import 'package:romeu_lanches_admin/components/header/header.dart';
 import 'package:romeu_lanches_admin/core/format/currency.dart';
 import 'package:romeu_lanches_admin/features/shop/view/shop_controller.dart';
+import 'package:romeu_lanches_admin/models/business_hours.dart';
 import 'package:romeu_lanches_admin/models/store_config.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,14 @@ import 'package:signals_flutter/signals_flutter.dart';
 const _darkBrown = Color(0xFF2A1F17);
 const _mutedText = Color(0xFF998875);
 const _hairline = Color(0xFFF0EBE5);
+const _accent = Color(0xFFE23725);
+
+/// Usado quando um dia fechado é aberto e ainda não tem horas gravadas —
+/// `aberto=true` sem horário é 400 na API.
+const _defaultOpenAt = '18:30';
+const _defaultCloseAt = '23:30';
+
+final _timePattern = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$');
 
 class ShopView extends StatefulWidget {
   final ShopController controller;
@@ -28,6 +37,24 @@ class _ShopViewState extends State<ShopView> {
     super.initState();
     _controller.load();
   }
+
+  void _report(String? message) {
+    if (message == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: GoogleFonts.plusJakartaSans(fontSize: 13)),
+        backgroundColor: _darkBrown,
+        behavior: SnackBarBehavior.floating,
+        width: 420,
+      ),
+    );
+  }
+
+  Future<void> _saveConfig(StoreConfig next) async =>
+      _report(await _controller.saveConfig(next));
+
+  Future<void> _saveHours(BusinessHours next) async =>
+      _report(await _controller.saveHours(next));
 
   @override
   Widget build(BuildContext context) {
@@ -49,17 +76,19 @@ class _ShopViewState extends State<ShopView> {
 
   Widget _buildBody() {
     final config = _controller.config.value;
-    final error = _controller.loadError.value;
 
     if (config == null && _controller.isLoading.value) {
       return const Center(child: CircularProgressIndicator());
     }
     if (config == null) {
       return _ErrorState(
-        message: error ?? 'Não foi possível carregar a configuração da loja.',
+        message: _controller.loadError.value ??
+            'Não foi possível carregar a configuração da loja.',
         onRetry: _controller.load,
       );
     }
+
+    final isSaving = _controller.isSavingConfig.value;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(32, 24, 32, 24),
@@ -70,7 +99,13 @@ class _ShopViewState extends State<ShopView> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(child: _OperatingHoursCard()),
+              Expanded(
+                child: _OperatingHoursCard(
+                  hours: _controller.hours.value,
+                  savingWeekday: _controller.savingWeekday.value,
+                  onSave: _saveHours,
+                ),
+              ),
               const SizedBox(width: 16),
               SizedBox(
                 width: 264,
@@ -78,9 +113,17 @@ class _ShopViewState extends State<ShopView> {
                   children: [
                     _StoreStatusCard(controller: _controller),
                     const SizedBox(height: 16),
-                    _DeliveryCard(config: config),
+                    _DeliveryCard(
+                      config: config,
+                      isSaving: isSaving,
+                      onSave: _saveConfig,
+                    ),
                     const SizedBox(height: 16),
-                    _PaymentCard(config: config),
+                    _PaymentCard(
+                      config: config,
+                      isSaving: isSaving,
+                      onSave: _saveConfig,
+                    ),
                   ],
                 ),
               ),
@@ -92,42 +135,12 @@ class _ShopViewState extends State<ShopView> {
   }
 }
 
-/// Aviso de que o controle abaixo não é editável, e por quê.
-class _Note extends StatelessWidget {
-  final String text;
-
-  const _Note(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.lock_outline, size: 13, color: _mutedText),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              text,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 11,
-                color: _mutedText,
-                height: 1.35,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _Card extends StatelessWidget {
   final String title;
+  final String? subtitle;
   final Widget child;
 
-  const _Card({required this.title, required this.child});
+  const _Card({required this.title, this.subtitle, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +162,17 @@ class _Card extends StatelessWidget {
               color: _darkBrown,
             ),
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 3),
+            Text(
+              subtitle!,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11.5,
+                color: _mutedText,
+                height: 1.35,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           child,
         ],
@@ -159,70 +183,294 @@ class _Card extends StatelessWidget {
 
 // ─── Horário de funcionamento ─────────────────────────────────────────────────
 
-/// A API não tem horário de funcionamento: não há campo no `ConfigLojaResponse`
-/// nem endpoint para gravar. Fica visível como pendência, e desabilitado, para
-/// não passar a impressão de que dá para configurar.
 class _OperatingHoursCard extends StatelessWidget {
-  const _OperatingHoursCard();
+  final List<BusinessHours> hours;
+  final int? savingWeekday;
+  final void Function(BusinessHours) onSave;
 
-  static const _days = [
-    'Domingo',
-    'Segunda',
-    'Terça',
-    'Quarta',
-    'Quinta',
-    'Sexta',
-    'Sábado',
-  ];
+  const _OperatingHoursCard({
+    required this.hours,
+    required this.savingWeekday,
+    required this.onSave,
+  });
 
   @override
   Widget build(BuildContext context) {
     return _Card(
       title: 'Horário de funcionamento',
+      subtitle:
+          'Só aparece na vitrine do cliente. Não abre nem fecha a loja — quem '
+          'faz isso é o botão ao lado.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _Note(
-            'A API ainda não tem horário de funcionamento — nem para ler, nem '
-            'para gravar. Hoje a loja é aberta e fechada na mão, no card ao lado.',
-          ),
-          const SizedBox(height: 6),
           const Divider(height: 1, thickness: 1, color: _hairline),
-          for (int i = 0; i < _days.length; i++) ...[
-            Opacity(
-              opacity: 0.45,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 90,
-                      child: Text(
-                        _days[i],
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: _darkBrown,
-                        ),
-                      ),
-                    ),
-                    const CupertinoSwitch(value: false, onChanged: null),
-                    const SizedBox(width: 20),
-                    Text(
-                      '—',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13,
-                        color: _mutedText,
-                      ),
-                    ),
-                  ],
+          if (hours.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text(
+                'Nenhum horário retornado pela API.',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  color: _mutedText,
+                ),
+              ),
+            )
+          else
+            for (int i = 0; i < hours.length; i++) ...[
+              _DayRow(
+                key: ValueKey(hours[i].weekday),
+                day: hours[i],
+                isSaving: savingWeekday == hours[i].weekday,
+                isLocked: savingWeekday != null,
+                onSave: onSave,
+              ),
+              if (i < hours.length - 1)
+                const Divider(height: 1, thickness: 1, color: _hairline),
+            ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DayRow extends StatefulWidget {
+  final BusinessHours day;
+  final bool isSaving;
+  final bool isLocked;
+  final void Function(BusinessHours) onSave;
+
+  const _DayRow({
+    super.key,
+    required this.day,
+    required this.isSaving,
+    required this.isLocked,
+    required this.onSave,
+  });
+
+  @override
+  State<_DayRow> createState() => _DayRowState();
+}
+
+class _DayRowState extends State<_DayRow> {
+  late final TextEditingController _openAt;
+  late final TextEditingController _closeAt;
+  late final FocusNode _openFocus;
+  late final FocusNode _closeFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    _openAt = TextEditingController(text: widget.day.openAt ?? '');
+    _closeAt = TextEditingController(text: widget.day.closeAt ?? '');
+    _openFocus = FocusNode()..addListener(_onFocusChange);
+    _closeFocus = FocusNode()..addListener(_onFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(_DayRow old) {
+    super.didUpdateWidget(old);
+    if (_openFocus.hasFocus || _closeFocus.hasFocus) return;
+    if (old.day.openAt != widget.day.openAt) {
+      _openAt.text = widget.day.openAt ?? '';
+    }
+    if (old.day.closeAt != widget.day.closeAt) {
+      _closeAt.text = widget.day.closeAt ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _openFocus.removeListener(_onFocusChange);
+    _closeFocus.removeListener(_onFocusChange);
+    _openFocus.dispose();
+    _closeFocus.dispose();
+    _openAt.dispose();
+    _closeAt.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (!_openFocus.hasFocus && !_closeFocus.hasFocus) _commitTimes();
+  }
+
+  void _toggleOpen(bool open) {
+    if (!open) {
+      widget.onSave(widget.day.copyWith(open: false));
+      return;
+    }
+    // Abrir um dia sem horário gravado seria 400 — entra com o padrão da casa.
+    widget.onSave(
+      BusinessHours(
+        weekday: widget.day.weekday,
+        open: true,
+        openAt: widget.day.openAt ?? _defaultOpenAt,
+        closeAt: widget.day.closeAt ?? _defaultCloseAt,
+      ),
+    );
+  }
+
+  void _commitTimes() {
+    if (!widget.day.open) return;
+
+    final open = _openAt.text.trim();
+    final close = _closeAt.text.trim();
+
+    // Formato inválido volta ao valor do servidor em vez de ir para a API.
+    if (!_timePattern.hasMatch(open) || !_timePattern.hasMatch(close)) {
+      _openAt.text = widget.day.openAt ?? '';
+      _closeAt.text = widget.day.closeAt ?? '';
+      return;
+    }
+    if (open == widget.day.openAt && close == widget.day.closeAt) return;
+
+    // Fechamento antes da abertura é aceito de propósito: turno que vira a
+    // madrugada, tipo 18:30 → 00:00. Nada de validar ordem aqui.
+    widget.onSave(widget.day.copyWith(openAt: open, closeAt: close));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final day = widget.day;
+    final disabled = widget.isLocked;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              day.label,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: day.open ? _darkBrown : _mutedText,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 60,
+            child: widget.isSaving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : CupertinoSwitch(
+                    value: day.open,
+                    onChanged: disabled ? null : _toggleOpen,
+                    activeTrackColor: const Color(0xFF4CAF50),
+                  ),
+          ),
+          const SizedBox(width: 12),
+          if (day.open) ...[
+            _TimeField(
+              controller: _openAt,
+              focusNode: _openFocus,
+              enabled: !disabled,
+              onSubmitted: _commitTimes,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text(
+                '—',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  color: _mutedText,
                 ),
               ),
             ),
-            if (i < _days.length - 1)
-              const Divider(height: 1, thickness: 1, color: _hairline),
-          ],
+            _TimeField(
+              controller: _closeAt,
+              focusNode: _closeFocus,
+              enabled: !disabled,
+              onSubmitted: _commitTimes,
+            ),
+            if (day.crossesMidnight)
+              Padding(
+                padding: const EdgeInsets.only(left: 10),
+                child: Tooltip(
+                  message: 'Fecha depois da meia-noite',
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.nightlight_outlined,
+                        size: 14,
+                        color: _mutedText,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'vira o dia',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11.5,
+                          color: _mutedText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ] else
+            Text(
+              'Fechado',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                color: _mutedText,
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+class _TimeField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool enabled;
+  final VoidCallback onSubmitted;
+
+  const _TimeField({
+    required this.controller,
+    required this.focusNode,
+    required this.enabled,
+    required this.onSubmitted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 68,
+      height: 34,
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        enabled: enabled,
+        textAlign: TextAlign.center,
+        onSubmitted: (_) => onSubmitted(),
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: _darkBrown,
+        ),
+        decoration: InputDecoration(
+          hintText: '18:30',
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFFDDD5CB)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFFB5A090)),
+          ),
+          disabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFFEDE6DE)),
+          ),
+        ),
       ),
     );
   }
@@ -342,10 +590,90 @@ class _StoreStatusCard extends StatelessWidget {
 
 // ─── Entrega ──────────────────────────────────────────────────────────────────
 
-class _DeliveryCard extends StatelessWidget {
+class _DeliveryCard extends StatefulWidget {
   final StoreConfig config;
+  final bool isSaving;
+  final void Function(StoreConfig) onSave;
 
-  const _DeliveryCard({required this.config});
+  const _DeliveryCard({
+    required this.config,
+    required this.isSaving,
+    required this.onSave,
+  });
+
+  @override
+  State<_DeliveryCard> createState() => _DeliveryCardState();
+}
+
+class _DeliveryCardState extends State<_DeliveryCard> {
+  late final TextEditingController _fee;
+  late final TextEditingController _time;
+  late final FocusNode _feeFocus;
+  late final FocusNode _timeFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    _fee = TextEditingController(text: brlAmount(widget.config.deliveryFee));
+    _time = TextEditingController(
+      text: widget.config.estimatedTimeMin.toString(),
+    );
+    _feeFocus = FocusNode()..addListener(_onFeeFocus);
+    _timeFocus = FocusNode()..addListener(_onTimeFocus);
+  }
+
+  @override
+  void didUpdateWidget(_DeliveryCard old) {
+    super.didUpdateWidget(old);
+    if (old.config.deliveryFee != widget.config.deliveryFee &&
+        !_feeFocus.hasFocus) {
+      _fee.text = brlAmount(widget.config.deliveryFee);
+    }
+    if (old.config.estimatedTimeMin != widget.config.estimatedTimeMin &&
+        !_timeFocus.hasFocus) {
+      _time.text = widget.config.estimatedTimeMin.toString();
+    }
+  }
+
+  @override
+  void dispose() {
+    _feeFocus.removeListener(_onFeeFocus);
+    _timeFocus.removeListener(_onTimeFocus);
+    _feeFocus.dispose();
+    _timeFocus.dispose();
+    _fee.dispose();
+    _time.dispose();
+    super.dispose();
+  }
+
+  void _onFeeFocus() {
+    if (!_feeFocus.hasFocus) _commitFee();
+  }
+
+  void _onTimeFocus() {
+    if (!_timeFocus.hasFocus) _commitTime();
+  }
+
+  void _commitFee() {
+    final parsed = parseBrl(_fee.text);
+    if (parsed == null) {
+      _fee.text = brlAmount(widget.config.deliveryFee);
+      return;
+    }
+    if (parsed == widget.config.deliveryFee) return;
+    widget.onSave(widget.config.copyWith(deliveryFee: parsed));
+  }
+
+  void _commitTime() {
+    final parsed = int.tryParse(_time.text.trim());
+    // A API rejeita zero; devolver o valor bom evita um 400 desnecessário.
+    if (parsed == null || parsed <= 0) {
+      _time.text = widget.config.estimatedTimeMin.toString();
+      return;
+    }
+    if (parsed == widget.config.estimatedTimeMin) return;
+    widget.onSave(widget.config.copyWith(estimatedTimeMin: parsed));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -353,15 +681,32 @@ class _DeliveryCard extends StatelessWidget {
       title: 'Entrega',
       child: Column(
         children: [
-          _ReadOnlyRow(
-            label: 'Taxa de entrega',
-            value: brl(config.deliveryFee),
+          _EditableRow(
+            label: 'Taxa de entrega (R\$)',
+            controller: _fee,
+            focusNode: _feeFocus,
+            enabled: !widget.isSaving,
+            onSubmitted: _commitFee,
           ),
           const SizedBox(height: 10),
-          const _ReadOnlyRow(label: 'Tempo estimado', value: '—'),
-          const _Note(
-            'A taxa vem do banco, mas a API não expõe endpoint para alterá-la. '
-            'Tempo estimado ainda não existe no backend.',
+          _EditableRow(
+            label: 'Tempo estimado (min)',
+            controller: _time,
+            focusNode: _timeFocus,
+            enabled: !widget.isSaving,
+            onSubmitted: _commitTime,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              'A taxa nova vale para os próximos pedidos; os já feitos guardam '
+              'a taxa da hora da compra.',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                color: _mutedText,
+                height: 1.35,
+              ),
+            ),
           ),
         ],
       ),
@@ -369,11 +714,20 @@ class _DeliveryCard extends StatelessWidget {
   }
 }
 
-class _ReadOnlyRow extends StatelessWidget {
+class _EditableRow extends StatelessWidget {
   final String label;
-  final String value;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool enabled;
+  final VoidCallback onSubmitted;
 
-  const _ReadOnlyRow({required this.label, required this.value});
+  const _EditableRow({
+    required this.label,
+    required this.controller,
+    required this.focusNode,
+    required this.enabled,
+    required this.onSubmitted,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -388,19 +742,35 @@ class _ReadOnlyRow extends StatelessWidget {
             ),
           ),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFAF7F4),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE7DFD6)),
-          ),
-          child: Text(
-            value,
+        SizedBox(
+          width: 72,
+          height: 34,
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            enabled: enabled,
+            textAlign: TextAlign.center,
+            onSubmitted: (_) => onSubmitted(),
             style: GoogleFonts.plusJakartaSans(
               fontSize: 13,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
               color: _darkBrown,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFDDD5CB)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFB5A090)),
+              ),
+              disabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFEDE6DE)),
+              ),
             ),
           ),
         ),
@@ -413,8 +783,22 @@ class _ReadOnlyRow extends StatelessWidget {
 
 class _PaymentCard extends StatelessWidget {
   final StoreConfig config;
+  final bool isSaving;
+  final void Function(StoreConfig) onSave;
 
-  const _PaymentCard({required this.config});
+  const _PaymentCard({
+    required this.config,
+    required this.isSaving,
+    required this.onSave,
+  });
+
+  /// Desligar a última forma deixaria o cliente sem como pagar: todo
+  /// `POST /app/pedidos` passaria a voltar 400.
+  bool get _isLastEnabled =>
+      [config.acceptsPix, config.acceptsCard, config.acceptsCash]
+          .where((enabled) => enabled)
+          .length ==
+      1;
 
   @override
   Widget build(BuildContext context) {
@@ -422,15 +806,39 @@ class _PaymentCard extends StatelessWidget {
       title: 'Formas de pagamento',
       child: Column(
         children: [
-          _PaymentRow(label: 'PIX', value: config.acceptsPix),
-          const Divider(height: 1, thickness: 1, color: _hairline),
-          _PaymentRow(label: 'Cartão', value: config.acceptsCard),
-          const Divider(height: 1, thickness: 1, color: _hairline),
-          _PaymentRow(label: 'Dinheiro na entrega', value: config.acceptsCash),
-          const _Note(
-            'Reflete o que está no banco. A API não tem endpoint para ligar ou '
-            'desligar forma de pagamento.',
+          _PaymentRow(
+            label: 'PIX',
+            value: config.acceptsPix,
+            enabled: !isSaving && !(config.acceptsPix && _isLastEnabled),
+            onChanged: (v) => onSave(config.copyWith(acceptsPix: v)),
           ),
+          const Divider(height: 1, thickness: 1, color: _hairline),
+          _PaymentRow(
+            label: 'Cartão',
+            value: config.acceptsCard,
+            enabled: !isSaving && !(config.acceptsCard && _isLastEnabled),
+            onChanged: (v) => onSave(config.copyWith(acceptsCard: v)),
+          ),
+          const Divider(height: 1, thickness: 1, color: _hairline),
+          _PaymentRow(
+            label: 'Dinheiro na entrega',
+            value: config.acceptsCash,
+            enabled: !isSaving && !(config.acceptsCash && _isLastEnabled),
+            onChanged: (v) => onSave(config.copyWith(acceptsCash: v)),
+          ),
+          if (_isLastEnabled)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(
+                'É a única forma ativa — desligar deixaria o cliente sem como '
+                'fechar o pedido.',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11,
+                  color: _accent,
+                  height: 1.35,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -440,8 +848,15 @@ class _PaymentCard extends StatelessWidget {
 class _PaymentRow extends StatelessWidget {
   final String label;
   final bool value;
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
 
-  const _PaymentRow({required this.label, required this.value});
+  const _PaymentRow({
+    required this.label,
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -459,11 +874,9 @@ class _PaymentRow extends StatelessWidget {
               ),
             ),
           ),
-          // Desabilitado de propósito: mostra o estado real, mas não há como
-          // gravar mudança.
           CupertinoSwitch(
             value: value,
-            onChanged: null,
+            onChanged: enabled ? onChanged : null,
             activeTrackColor: const Color(0xFF4CAF50),
           ),
         ],
@@ -506,7 +919,7 @@ class _ErrorState extends StatelessWidget {
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: const Color(0xFFE23725),
+                color: _accent,
               ),
             ),
           ),

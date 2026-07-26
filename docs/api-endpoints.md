@@ -169,7 +169,28 @@ Todos os adicionais ativos do catálogo (sem vínculo de categoria).
 ```json
 { "aberta": true }
 ```
-Só expõe `aberta` — flags internas (taxa, formas de pagamento) não vazam aqui.
+Só expõe `aberta` — flags internas (formas de pagamento) não vazam aqui.
+
+### `GET /public/loja/info` → `LojaInfoResponse`
+```json
+{ "taxaEntrega": 8.00, "tempoEstimadoMin": 40,
+  "aceitaPix": true, "aceitaCartao": true, "aceitaDinheiro": false }
+```
+Dados que o app do cliente exibe na **tela de confirmação do pedido**: taxa, tempo estimado
+e as formas de pagamento habilitadas. Ofereça no seletor **apenas** as flags `true` — mandar
+uma forma desligada em `POST /app/pedidos` retorna `400 {"error":"Forma de pagamento não aceita"}`.
+
+Não expõe `aberta` — para isso use `/public/loja/status`.
+
+### `GET /public/loja/horarios` → `HorarioResponse[]`
+Os 7 dias, ordenados de **Segunda (1) a Domingo (7)**. Puramente informativo — ver §6.6.
+```json
+[
+  { "diaSemana": 1, "aberto": false, "abertura": null,    "fechamento": null    },
+  { "diaSemana": 2, "aberto": true,  "abertura": "18:30", "fechamento": "23:30" },
+  { "diaSemana": 5, "aberto": true,  "abertura": "18:30", "fechamento": "00:00" }
+]
+```
 
 ---
 
@@ -405,9 +426,30 @@ A config é um **singleton** (uma única linha no banco).
 
 #### `GET /admin/config` → `ConfigLojaResponse`
 ```json
-{ "aberta": true, "taxaEntrega": 8.00,
+{ "aberta": true, "taxaEntrega": 8.00, "tempoEstimadoMin": 40,
   "aceitaPix": true, "aceitaCartao": true, "aceitaDinheiro": true }
 ```
+
+#### `PATCH /admin/config` → 200 `ConfigLojaResponse`
+Atualiza a configuração da loja. **Todos os campos são obrigatórios** — é uma substituição
+do conjunto editável, não um patch parcial: enviar o payload incompleto dá `400`.
+Faça `GET /admin/config` primeiro e mande o objeto inteiro.
+```json
+// AtualizarConfigRequest
+{
+  "taxaEntrega": 9.50,        // obrigatório, >= 0
+  "tempoEstimadoMin": 45,     // obrigatório, > 0 (zero é rejeitado)
+  "aceitaPix": true,          // obrigatório
+  "aceitaCartao": true,       // obrigatório
+  "aceitaDinheiro": false     // obrigatório
+}
+```
+⚠️ **Não aceita `aberta`** — se enviado, é ignorado. O toggle de abrir/fechar tem rota
+dedicada abaixo. A resposta inclui `aberta` (valor atual, inalterado).
+
+Efeitos imediatos, sem reinício: `taxaEntrega` passa a valer nos **próximos** pedidos de
+entrega (pedidos já criados guardam a taxa em snapshot); desligar uma flag `aceita*` faz o
+`POST /app/pedidos` com aquela forma retornar `400 {"error":"Forma de pagamento não aceita"}`.
 
 #### `PATCH /admin/config/aberta` → `ConfigLojaResponse`
 ```json
@@ -416,10 +458,53 @@ A config é um **singleton** (uma única linha no banco).
 Fechar a loja bloqueia **novos** pedidos (409 no `POST /app/pedidos`); pedidos em andamento
 seguem o fluxo normalmente.
 
-⚠️ Não há endpoint para alterar `taxaEntrega` nem as flags `aceita*` — hoje são só leitura
-via API (mudança direta no banco).
+> O horário de funcionamento (§6.6) é **informativo** e não influencia `aberta` — abrir e
+> fechar a loja é sempre ação manual do admin.
 
-### 6.6 Relatório — `/admin/relatorio`
+### 6.6 Horário de funcionamento — `/admin/horarios`
+
+Registro exibido na vitrine ("seg–sáb, 18h30–23h30"). **Não é funcional**: não abre nem
+fecha a loja sozinho, quem manda é o toggle `aberta` (§6.5). Os 7 dias já existem no banco —
+não há `POST` nem `DELETE`, só leitura e edição.
+
+`diaSemana` é `Integer` na convenção `java.time.DayOfWeek`:
+
+| 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|
+| Segunda | Terça | Quarta | Quinta | Sexta | Sábado | Domingo |
+
+⚠️ **Não é 0–6 começando no domingo.** `Date.getDay()` do JavaScript usa 0=Domingo — precisa
+converter: `diaSemana = date.getDay() === 0 ? 7 : date.getDay()`.
+
+#### `GET /admin/horarios` → `HorarioResponse[]`
+Os 7 dias ordenados por `diaSemana` (Segunda → Domingo). Mesmo payload do endpoint público.
+```json
+[ { "diaSemana": 1, "aberto": false, "abertura": null, "fechamento": null } ]
+```
+`abertura`/`fechamento` são `LocalTime` serializados como `"HH:mm"` (ou `"HH:mm:ss"` se
+houver segundos) e vêm `null` quando `aberto=false`.
+
+#### `PUT /admin/horarios/{diaSemana}` → 200 `HorarioResponse`
+```json
+// AtualizarHorarioRequest
+{ "aberto": true, "abertura": "18:30", "fechamento": "23:30" }
+// dia fechado — as horas são ignoradas e gravadas como null
+{ "aberto": false }
+```
+- `{diaSemana}` fora de 1–7 (ou inexistente) → `404 {"error":"Horário não encontrado"}`.
+- `aberto=true` com `abertura` ou `fechamento` nulos → `400` no formato de validação:
+  ```json
+  { "error": "Dados inválidos",
+    "campos": { "horasInformadasQuandoAberto":
+                "horário de abertura e fechamento são obrigatórios quando o dia está aberto" } }
+  ```
+- `aberto=false`: as horas enviadas são descartadas e a resposta volta com `null`.
+
+⚠️ **`fechamento` menor que `abertura` é válido** e significa virar a madrugada — o próprio
+seed usa `18:30 → 00:00` em sexta e sábado. Não há validação de ordem; ao renderizar
+"18:30 às 00:00", trate o fechamento como pertencente ao dia seguinte.
+
+### 6.7 Relatório — `/admin/relatorio`
 
 #### `GET /admin/relatorio/dia` → `RelatorioDiaResponse`
 ```json
@@ -545,6 +630,8 @@ GET    /public/produtos/{id}
 GET    /public/produtos/{id}/adicionais
 GET    /public/adicionais
 GET    /public/loja/status
+GET    /public/loja/info
+GET    /public/loja/horarios
 POST   /webhook/mercadopago                        (só Mercado Pago)
 GET    /actuator/health
 
@@ -580,7 +667,10 @@ POST   /admin/adicionais
 PUT    /admin/adicionais/{id}
 PATCH  /admin/adicionais/{id}/ativo
 GET    /admin/config
+PATCH  /admin/config                               payload completo obrigatório
 PATCH  /admin/config/aberta
+GET    /admin/horarios
+PUT    /admin/horarios/{diaSemana}                 diaSemana 1=Seg .. 7=Dom
 GET    /admin/relatorio/dia
 
 WEBSOCKET
@@ -607,3 +697,19 @@ WEBSOCKET
 10. Não há endpoint de perfil do cliente nem de listagem/CRUD de admins.
 11. `adicionalIds` só aceita adicionais vinculados à **categoria** do produto do item.
 12. Pedido PIX só aparece no kanban do admin depois do pagamento aprovado.
+13. `PATCH /admin/config` exige **todos** os cinco campos (`taxaEntrega`, `tempoEstimadoMin`,
+    `aceitaPix`, `aceitaCartao`, `aceitaDinheiro`). É `PATCH` na rota, mas semântica de
+    substituição: faça `GET` antes e reenvie o objeto completo.
+14. `aberta` **não** é editável por `PATCH /admin/config` (só por `PATCH /admin/config/aberta`),
+    e `tempoEstimadoMin` **não** é editável pelo toggle `/aberta`. São rotas independentes.
+15. As formas de pagamento ativas vêm em `GET /public/loja/info` (público) — use isso para
+    montar o seletor de pagamento, senão o cliente escolhe uma forma desligada e toma `400`
+    só ao finalizar. `aberta` **não** está nesse endpoint, e sim em `/public/loja/status`:
+    a tela de confirmação normalmente precisa dos dois.
+16. `diaSemana` é **1=Segunda … 7=Domingo**, não 0=Domingo. Converter do JS:
+    `d.getDay() === 0 ? 7 : d.getDay()`.
+17. Horário de funcionamento é **decorativo**: não abre nem fecha a loja, e a loja pode
+    estar `aberta=true` fora do horário publicado (ou o contrário). Nunca derive
+    disponibilidade do `/horarios` — use `/public/loja/status`.
+18. Em `PUT /admin/horarios/{diaSemana}`, `fechamento < abertura` é aceito de propósito
+    (turno que vira a madrugada, ex.: `18:30 → 00:00`). Não valide ordem no front.
