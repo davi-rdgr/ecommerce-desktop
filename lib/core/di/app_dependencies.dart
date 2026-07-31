@@ -28,13 +28,18 @@ class AppDependencies {
     apiClient = ApiClient(session);
     scaffoldFullDependencies = ScaffoldFullDependencies();
     loginFullDependencies = LoginFullDependencies(apiClient, session);
-    homeFullDependencies = HomeFullDependencies(apiClient, session);
+    // Antes do painel: ele usa o mesmo ReportService para os cards de "HOJE".
+    reportFullDependencies = ReportFullDependencies(apiClient);
+    homeFullDependencies = HomeFullDependencies(
+      apiClient,
+      session,
+      reportFullDependencies.reportService,
+    );
     menuFullDependencies = MenuFullDependencies(apiClient);
     shopFullDependencies = ShopFullDependencies(
       apiClient,
       scaffoldFullDependencies.scaffold,
     );
-    reportFullDependencies = ReportFullDependencies(apiClient);
 
     // Sessão derrubada no meio do turno (backend reiniciado, JWT_SECRET novo):
     // volta pro login em vez de deixar a tela quebrando em silêncio.

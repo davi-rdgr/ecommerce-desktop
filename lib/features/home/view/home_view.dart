@@ -26,7 +26,7 @@ class _HomeViewState extends State<HomeView> {
   @override
   void initState() {
     super.initState();
-    _controller.loadOrders();
+    _controller.refresh();
     _controller.startRealtime();
   }
 
@@ -157,7 +157,7 @@ class _HomeViewState extends State<HomeView> {
                         const SizedBox(width: 12),
                         _RefreshButton(
                           isLoading: _controller.isLoading.value,
-                          onPressed: _controller.loadOrders,
+                          onPressed: _controller.refresh,
                         ),
                       ],
                     ),
@@ -190,7 +190,7 @@ class _HomeViewState extends State<HomeView> {
       return _BoardMessage(
         icon: Icons.cloud_off_outlined,
         message: error,
-        onRetry: _controller.loadOrders,
+        onRetry: _controller.refresh,
       );
     }
 

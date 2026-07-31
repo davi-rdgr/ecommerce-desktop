@@ -12,8 +12,12 @@ class TopSeller {
 
 /// `RelatorioDiaResponse`.
 ///
-/// Conta **apenas pedidos concluídos** do dia civil em America/São_Paulo, e
-/// traz no máximo 10 mais vendidos. Dia sem venda volta zerado, nunca nulo.
+/// Conta **apenas pedidos concluídos** do dia operacional em America/São_Paulo
+/// — que vai das 2h de um dia às 2h do seguinte, não do dia civil — e traz no
+/// máximo 10 mais vendidos. Dia sem venda volta zerado, nunca nulo.
+///
+/// Por isso [date] é o dia de referência do **expediente**: consultado às 00:30
+/// ele ainda responde a data de ontem. Não comparar com o relógio da máquina.
 class DailyReport {
   final DateTime date;
   final double revenue;

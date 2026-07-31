@@ -2,6 +2,8 @@ import 'package:romeu_lanches_admin/components/header/header.dart';
 import 'package:romeu_lanches_admin/core/format/currency.dart';
 import 'package:romeu_lanches_admin/features/report/view/report_controller.dart';
 import 'package:romeu_lanches_admin/models/daily_report.dart';
+import 'package:romeu_lanches_admin/models/hourly_sales.dart';
+import 'package:romeu_lanches_admin/models/revenue_by_payment.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -55,7 +57,8 @@ class _ReportViewState extends State<ReportView> {
     }
     if (report == null) {
       return _ErrorState(
-        message: _controller.loadError.value ??
+        message:
+            _controller.loadError.value ??
             'Não foi possível carregar o relatório.',
         onRetry: _controller.load,
       );
@@ -83,29 +86,18 @@ class _ReportViewState extends State<ReportView> {
                 children: [
                   Expanded(child: _TopSellersCard(sellers: report.topSellers)),
                   const SizedBox(width: 16),
-                  const SizedBox(
+                  SizedBox(
                     width: 264,
-                    child: Column(
-                      children: [
-                        _UnavailableCard(
-                          title: 'Vendas por horário',
-                          message:
-                              'O relatório da API entrega só os totais do dia. '
-                              'Para o gráfico por hora seria preciso um endpoint '
-                              'novo no backend.',
-                        ),
-                        SizedBox(height: 16),
-                        _UnavailableCard(
-                          title: 'Por forma de pagamento',
-                          message:
-                              'A API não quebra o faturamento por PIX, cartão e '
-                              'dinheiro.',
-                        ),
-                      ],
+                    child: _PaymentBreakdownCard(
+                      entries: _controller.revenueByPayment.value,
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              // Série de 24 horas ocupa a largura toda: espremida na coluna de
+              // 264 as barras não caberiam com os rótulos.
+              _HourlySalesCard(hours: _controller.hourlySales.value),
             ],
           ),
         ),
@@ -317,10 +309,7 @@ class _TopSellersCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             'Top 10 do dia, por quantidade',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              color: _mutedText,
-            ),
+            style: GoogleFonts.plusJakartaSans(fontSize: 12, color: _mutedText),
           ),
           const SizedBox(height: 12),
           if (sellers.isEmpty)
@@ -421,50 +410,254 @@ class _TopSellerRow extends StatelessWidget {
   }
 }
 
-// ─── Sem dado na API ──────────────────────────────────────────────────────────
+// ─── Por forma de pagamento ───────────────────────────────────────────────────
 
-class _UnavailableCard extends StatelessWidget {
-  final String title;
-  final String message;
+class _PaymentBreakdownCard extends StatelessWidget {
+  final List<RevenueByPayment> entries;
 
-  const _UnavailableCard({required this.title, required this.message});
+  const _PaymentBreakdownCard({required this.entries});
 
   @override
   Widget build(BuildContext context) {
+    final total = entries.fold<double>(0, (sum, e) => sum + e.revenue);
+
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _hairline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.insights_outlined, size: 16, color: _mutedText),
-              const SizedBox(width: 8),
-              Expanded(
+          Text(
+            'Por forma de pagamento',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: _darkBrown,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Faturamento do dia',
+            style: GoogleFonts.plusJakartaSans(fontSize: 12, color: _mutedText),
+          ),
+          const SizedBox(height: 14),
+          // As três formas vêm sempre; a lista só fica vazia se a chamada não
+          // tiver chegado.
+          for (int i = 0; i < entries.length; i++) ...[
+            _PaymentRow(entry: entries[i], total: total),
+            if (i < entries.length - 1) const SizedBox(height: 12),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentRow extends StatelessWidget {
+  final RevenueByPayment entry;
+  final double total;
+
+  const _PaymentRow({required this.entry, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    // Dia sem venda nenhuma vem com as três formas zeradas — barra vazia, não
+    // divisão por zero.
+    final share = total == 0 ? 0.0 : entry.revenue / total;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              entry.method.label,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _darkBrown,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '${(share * 100).round()}%',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: _mutedText,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              brl(entry.revenue),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: _darkBrown,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: share,
+            backgroundColor: _hairline,
+            valueColor: const AlwaysStoppedAnimation<Color>(_accent),
+            minHeight: 7,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Vendas por horário ───────────────────────────────────────────────────────
+
+class _HourlySalesCard extends StatelessWidget {
+  final List<HourlySales> hours;
+
+  const _HourlySalesCard({required this.hours});
+
+  @override
+  Widget build(BuildContext context) {
+    final peak = hours.fold<int>(
+      0,
+      (max, h) => h.quantity > max ? h.quantity : max,
+    );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Vendas por horário',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: _darkBrown,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Pedidos concluídos por hora — o expediente vira às 2h da madrugada',
+            style: GoogleFonts.plusJakartaSans(fontSize: 12, color: _mutedText),
+          ),
+          const SizedBox(height: 16),
+          if (hours.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Center(
                 child: Text(
-                  title,
+                  'Sem dados de movimento por hora.',
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
                     color: _mutedText,
                   ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
+            )
+          else
+            SizedBox(
+              height: 132,
+              // Na ordem em que o backend mandou (2h → 1h): é a ordem
+              // cronológica do expediente. Ordenar por hora aqui jogaria a
+              // madrugada para a esquerda e partiria a curva em duas.
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (final hour in hours)
+                    Expanded(
+                      child: _HourBar(entry: hour, peak: peak),
+                    ),
+                ],
+              ),
+            ),
+          if (hours.isNotEmpty && peak == 0) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Nenhum pedido concluído neste expediente ainda.',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                color: _mutedText,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HourBar extends StatelessWidget {
+  final HourlySales entry;
+  final int peak;
+
+  const _HourBar({required this.entry, required this.peak});
+
+  /// Altura da barra mais alta; horas sem venda ficam só com o toco de 6px.
+  static const _maxBarHeight = 84.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = peak == 0 ? 0.0 : entry.quantity / peak;
+
+    final Color color;
+    if (entry.quantity == 0) {
+      color = _hairline;
+    } else if (entry.quantity == peak) {
+      color = _accent;
+    } else {
+      color = _accent.withValues(alpha: 0.38);
+    }
+
+    return Tooltip(
+      message:
+          '${entry.label} · ${entry.quantity} '
+          '${entry.quantity == 1 ? 'pedido' : 'pedidos'}',
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
           Text(
-            message,
+            entry.quantity == 0 ? '' : '${entry.quantity}',
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.clip,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 11.5,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: _darkBrown,
+            ),
+          ),
+          const SizedBox(height: 4),
+          FractionallySizedBox(
+            widthFactor: 0.6,
+            child: Container(
+              height: 6 + ratio * _maxBarHeight,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            entry.label,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.clip,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 9.5,
               color: _mutedText,
-              height: 1.4,
             ),
           ),
         ],

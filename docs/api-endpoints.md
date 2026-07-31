@@ -339,6 +339,20 @@ propagada via WebSocket (pedido vai de `AGUARDANDO_PAGAMENTO` para `NOVO`).
 ⚠️ `status` é **obrigatório** e não tem default — sem ele: `400`. Valor deve ser um
 `StatusPedido` exato (maiúsculas). Para montar um kanban, faça uma chamada por coluna.
 
+**Quantos vêm e em que ordem depende do status** — o backend decide, não há parâmetro:
+
+| Status | Quantos | Ordem |
+|---|---|---|
+| `NOVO`, `EM_PREPARO`, `PRONTO`, `AGUARDANDO_PAGAMENTO` | todos | `criadoEm` **ASC** (mais antigo primeiro = ordem de chegada da fila) |
+| `CONCLUIDO`, `CANCELADO` | só os **30 mais recentes** | `criadoEm` **DESC** (mais novo primeiro) |
+
+Os status terminais acumulam para sempre, então o servidor corta em 30 — as colunas
+Concluídos/Cancelados do kanban mostram "os últimos 30", **não** o histórico do dia nem
+o histórico completo. Não filtre por data no front: não há como pedir "só hoje", e o
+corte por quantidade já resolve o volume. Não existe paginação navegável aqui (sem
+`page`/`size`); se um dia precisar de tela de histórico com "carregar mais", vira
+endpoint novo.
+
 #### `GET /admin/pedidos/{id}` → `PedidoResponse`
 Sem filtro por cliente (admin vê qualquer pedido). `404` se não existir.
 
@@ -506,6 +520,37 @@ seed usa `18:30 → 00:00` em sexta e sábado. Não há validação de ordem; ao
 
 ### 6.7 Relatório — `/admin/relatorio`
 
+Os três relatórios compartilham o mesmo recorte: **apenas pedidos `CONCLUIDO`** do **dia
+operacional corrente** em `America/Sao_Paulo`. Pedido cancelado, em andamento ou aguardando
+pagamento nunca entra na conta.
+
+**O dia do relatório não é o dia civil — é o expediente.** Como a lanchonete fecha de
+madrugada, o dia operacional vai das **02:00 de um dia às 02:00 do dia seguinte** (início
+inclusive, fim exclusive). Assim a noite inteira fica no dia em que o expediente começou,
+em vez de o movimento depois da meia-noite pular para o dia seguinte.
+
+Consequências práticas:
+
+| Momento da consulta (hora de Brasília) | Dia operacional retornado |
+|---|---|
+| 31/07 às 14:00 | 31/07 — de 31/07 02:00 até 01/08 02:00 |
+| 31/07 às 23:50 | 31/07 — mesma janela |
+| **01/08 às 00:30** | **31/07** — ainda o expediente da noite anterior |
+| **01/08 às 01:59** | **31/07** — idem |
+| 01/08 às 02:00 | 01/08 — janela nova |
+
+- O campo `data` de `GET /admin/relatorio/dia` é o **dia de referência do expediente**, não
+  a data de hoje. Consultado às 00:30 de 01/08, ele responde `"2026-07-31"` — isso é
+  correto, não bug. Não compare esse campo com a data do relógio do usuário.
+- A virada dos números acontece às 02:00, não à meia-noite: um dashboard aberto durante a
+  madrugada continua somando no mesmo dia, e zera às 02:00.
+- Entre 02:00 e o horário de abertura os relatórios ficam zerados — é o dia operacional novo
+  e ainda vazio, não uma falha.
+
+⚠️ **Não há parâmetro de data** em nenhum dos três — o recorte é sempre o dia operacional
+corrente. Não existe relatório de período nem histórico; um dashboard que precise comparar
+dias tem de guardar os snapshots do lado do front.
+
 #### `GET /admin/relatorio/dia` → `RelatorioDiaResponse`
 ```json
 {
@@ -516,8 +561,55 @@ seed usa `18:30 → 00:00` em sexta e sábado. Não há validação de ordem; ao
   "maisVendidos": [ { "nome": "X-Burger", "quantidade": 41 } ]
 }
 ```
-Regras: considera **apenas pedidos `CONCLUIDO`** do dia civil em `America/Sao_Paulo`;
-top **10** mais vendidos; dia sem vendas retorna `0.00` / `0` (nunca `null`).
+Regras: top **10** mais vendidos; dia sem vendas retorna `0.00` / `0` (nunca `null`).
+`data` é o dia de referência do expediente (ver a virada das 02:00 acima), e `ticketMedio`
+é `faturamento / quantidadePedidos` já arredondado — não recalcule no front.
+
+#### `GET /admin/relatorio/vendas-por-hora` → `VendaPorHoraResponse[]`
+
+Contagem de pedidos concluídos por hora do expediente — insumo do gráfico de movimento.
+```json
+[
+  { "hora": 2,  "quantidade": 0 },
+  { "hora": 3,  "quantidade": 0 },
+  { "hora": 19, "quantidade": 7 },
+  { "hora": 20, "quantidade": 12 },
+  { "hora": 23, "quantidade": 4 },
+  { "hora": 0,  "quantidade": 3 },
+  { "hora": 1,  "quantidade": 1 }
+]
+```
+- **Sempre 24 itens**, já na **ordem cronológica do dia operacional**: começa em `2` e gira
+  até fechar o ciclo — `2, 3, …, 22, 23, 0, 1`. As horas `0` e `1` são a madrugada **final**
+  do expediente e vêm no fim do array, onde de fato acontecem.
+- Horas sem venda vêm com `quantidade: 0` — o array nunca tem buracos e nunca é vazio.
+- `hora` é a hora local de Brasília em que o pedido foi criado (`criadoEm`), não UTC.
+- É `quantidade` de **pedidos**, não faturamento nem itens vendidos.
+
+⚠️ **Plote na ordem em que o array chega; não ordene por `hora`.** Um `sort` por `hora`
+(ou qualquer lib de gráfico que reordene o eixo numericamente por conta própria) desfaz a
+sequência do expediente e joga a madrugada para a esquerda, partindo a curva em duas ilhas
+com o meio vazio. Trate `hora` como **rótulo** do eixo, não como valor ordenável — a
+posição do item no array já é a posição no gráfico.
+
+⚠️ A hora vem do **`criadoEm`** do pedido, ou seja, de quando o cliente pediu — não de
+quando o pedido foi concluído. Um pedido feito 23h50 e concluído 00h10 conta na hora `23`
+(e, como a virada é às 02:00, os dois instantes caem no mesmo dia operacional).
+
+#### `GET /admin/relatorio/faturamento-por-forma` → `FaturamentoPorFormaResponse[]`
+
+Faturamento do dia quebrado por forma de pagamento.
+```json
+[
+  { "formaPagamento": "PIX",      "faturamento": 980.00 },
+  { "formaPagamento": "CARTAO",   "faturamento": 610.50 },
+  { "formaPagamento": "DINHEIRO", "faturamento": 250.00 }
+]
+```
+- **As três formas sempre aparecem**, nesta ordem fixa (`PIX`, `CARTAO`, `DINHEIRO`), com
+  `0.00` onde não houve venda. Nunca `null`, nunca array vazio, nunca forma faltando.
+- `faturamento` é a soma do `total` dos pedidos (subtotal + taxa de entrega), com 2 casas.
+- A soma dos três bate com o `faturamento` de `GET /admin/relatorio/dia` do mesmo instante.
 
 ---
 
@@ -586,6 +678,9 @@ Notas para o front:
 - Um pedido PIX aparece no admin com `PEDIDO_CRIADO` (não `STATUS_ATUALIZADO`) quando o
   pagamento é aprovado — trate esse tipo como "inserir na coluna NOVO".
 - Cancelamento por PIX expirado **não** notifica o admin (o pedido nunca esteve no kanban).
+- Ao mover um card para `CONCLUIDO`/`CANCELADO` (por evento ou pela resposta do `PATCH`),
+  insira **no topo** da coluna, não no fim: essas colunas vêm `criadoEm` DESC do servidor
+  (ver §6.1). As colunas ativas continuam ASC — nelas o card entra no fim.
 
 ---
 
@@ -646,7 +741,7 @@ GET    /app/pedidos/{id}
 POST   /app/pedidos/{id}/pagamento
 
 ADMIN (Bearer, ROLE_ADMIN)
-GET    /admin/pedidos?status={StatusPedido}        status obrigatório
+GET    /admin/pedidos?status={StatusPedido}        status obrigatório; terminais = 30 mais recentes
 GET    /admin/pedidos/{id}
 PATCH  /admin/pedidos/{id}/aceitar
 PATCH  /admin/pedidos/{id}/pronto
@@ -671,7 +766,9 @@ PATCH  /admin/config                               payload completo obrigatório
 PATCH  /admin/config/aberta
 GET    /admin/horarios
 PUT    /admin/horarios/{diaSemana}                 diaSemana 1=Seg .. 7=Dom
-GET    /admin/relatorio/dia
+GET    /admin/relatorio/dia                        dia operacional 02:00 -> 02:00
+GET    /admin/relatorio/vendas-por-hora            sempre 24 itens, ordem 2..23,0,1 — não reordenar
+GET    /admin/relatorio/faturamento-por-forma      sempre PIX, CARTAO, DINHEIRO
 
 WEBSOCKET
 /ws  (SockJS + STOMP, Authorization no CONNECT)
@@ -713,3 +810,16 @@ WEBSOCKET
     disponibilidade do `/horarios` — use `/public/loja/status`.
 18. Em `PUT /admin/horarios/{diaSemana}`, `fechamento < abertura` é aceito de propósito
     (turno que vira a madrugada, ex.: `18:30 → 00:00`). Não valide ordem no front.
+19. `GET /admin/pedidos` **não devolve a mesma coisa para todo status**: terminais
+    (`CONCLUIDO`/`CANCELADO`) vêm limitados a 30 e em ordem **DESC**; ativos vêm todos e
+    **ASC**. Se o front assumir uma ordem só, a coluna Concluídos sai invertida. Ver §6.1.
+20. Os relatórios (§6.7) usam o **dia operacional (02:00 → 02:00)**, não o dia civil. Às
+    00:30 de 01/08 eles ainda respondem o expediente de 31/07, e o campo `data` do
+    `/dia` vem `"2026-07-31"` — não compare com a data do relógio do usuário. Os números
+    viram às **02:00**, não à meia-noite. Só `CONCLUIDO`, sem parâmetro de data.
+21. Em `/vendas-por-hora` a hora é a de **criação** do pedido (`criadoEm`), não de conclusão,
+    e o array **não vem `0..23`**: vem na ordem do expediente (`2, 3, …, 23, 0, 1`), com as
+    horas `0`/`1` no fim. **Não ordene por `hora`** — plote na ordem recebida, senão a
+    madrugada volta para a esquerda e a curva parte em duas. Em `/faturamento-por-forma` as
+    três formas vêm sempre, com `0.00` onde não houve venda. Nenhum dos dois precisa de
+    preenchimento de lacunas no front.
