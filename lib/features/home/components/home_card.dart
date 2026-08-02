@@ -29,8 +29,27 @@ class HomeCard extends StatelessWidget {
   });
 
   String get _timeAgo {
-    final diff = DateTime.now().difference(order.createdAt).inMinutes;
-    return 'há $diff min';
+    // Relógio do desktop atrasado em relação ao servidor deixa `criadoEm` no
+    // futuro — sem o clamp o card mostraria tempo negativo.
+    final total = DateTime.now().difference(order.createdAt);
+    final minutes = total.inMinutes < 0 ? 0 : total.inMinutes;
+
+    if (minutes < 60) return 'há $minutes min';
+
+    final hours = minutes ~/ 60;
+    if (hours < 24) {
+      final rest = minutes % 60;
+      if (rest == 0) return 'há ${hours}h';
+      return 'há ${hours}h${rest.toString().padLeft(2, '0')} min';
+    }
+
+    final days = hours ~/ 24;
+    if (days < 30) return 'há $days ${days == 1 ? 'dia' : 'dias'} atrás';
+
+    // A fila ativa vem inteira do backend, sem corte por data: um pedido
+    // esquecido em EM_PREPARO envelhece para sempre e cairia em "há 400 dias".
+    final months = days ~/ 30;
+    return 'há $months ${months == 1 ? 'mês' : 'meses'} atrás';
   }
 
   String get _itemsText =>
