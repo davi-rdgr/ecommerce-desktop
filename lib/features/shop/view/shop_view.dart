@@ -1,5 +1,6 @@
 import 'package:romeu_lanches_admin/components/header/header.dart';
 import 'package:romeu_lanches_admin/core/format/currency.dart';
+import 'package:romeu_lanches_admin/core/printing/paper_width.dart';
 import 'package:romeu_lanches_admin/features/shop/view/shop_controller.dart';
 import 'package:romeu_lanches_admin/models/business_hours.dart';
 import 'package:romeu_lanches_admin/models/store_config.dart';
@@ -55,6 +56,11 @@ class _ShopViewState extends State<ShopView> {
 
   Future<void> _saveHours(BusinessHours next) async =>
       _report(await _controller.saveHours(next));
+
+  Future<void> _testPrint() async => _report(
+    await _controller.testPrint() ??
+        'Cupom de teste enviado. Confira se a régua coube numa linha só.',
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +129,11 @@ class _ShopViewState extends State<ShopView> {
                       config: config,
                       isSaving: isSaving,
                       onSave: _saveConfig,
+                    ),
+                    const SizedBox(height: 16),
+                    _PrinterCard(
+                      controller: _controller,
+                      onTestPrint: _testPrint,
                     ),
                   ],
                 ),
@@ -840,6 +851,238 @@ class _PaymentCard extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Impressora de comandas ───────────────────────────────────────────────────
+
+/// Config da **máquina**, não da loja: fica no Hive local e não vai para a API.
+/// Por isso este card não passa por `isSavingConfig` nem pelo `_saveConfig`.
+class _PrinterCard extends StatelessWidget {
+  final ShopController controller;
+  final Future<void> Function() onTestPrint;
+
+  const _PrinterCard({required this.controller, required this.onTestPrint});
+
+  // SignalBuilder próprio, como o _StoreStatusCard: os signals lidos aqui
+  // estão fora do escopo do builder do corpo da tela, que só rastreia o que é
+  // lido dentro dele.
+  @override
+  Widget build(BuildContext context) =>
+      SignalBuilder(builder: (context) => _buildCard());
+
+  Widget _buildCard() {
+    final printers = controller.availablePrinters.value;
+    final selected = controller.selectedPrinter.value;
+    final paper = controller.paperWidth.value;
+    final isTesting = controller.isTestingPrinter.value;
+
+    // A escolhida pode ter sumido (impressora removida, PC trocado). Mostrar o
+    // dropdown vazio esconderia isso; o aviso abaixo é quem conta.
+    final isMissing = selected != null && !printers.contains(selected);
+
+    return _Card(
+      title: 'Impressora de comandas',
+      subtitle: 'Vale só para este computador — não é config da loja.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Impressora',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    color: _darkBrown,
+                  ),
+                ),
+              ),
+              _IconAction(
+                icon: Icons.refresh,
+                tooltip: 'Procurar impressoras de novo',
+                onTap: controller.refreshPrinters,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFDDD5CB)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: DropdownButton<String?>(
+                value: isMissing ? null : selected,
+                isExpanded: true,
+                underline: const SizedBox.shrink(),
+                isDense: true,
+                hint: Text(
+                  // Sem escolha explícita o envio cai na padrão do Windows.
+                  controller.effectivePrinter == null
+                      ? 'Nenhuma impressora instalada'
+                      : 'Padrão do Windows (${controller.effectivePrinter})',
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    color: _mutedText,
+                  ),
+                ),
+                items: [
+                  DropdownMenuItem<String?>(
+                    child: Text(
+                      'Padrão do Windows',
+                      style: GoogleFonts.plusJakartaSans(fontSize: 12),
+                    ),
+                  ),
+                  for (final printer in printers)
+                    DropdownMenuItem<String?>(
+                      value: printer,
+                      child: Text(
+                        printer,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12),
+                      ),
+                    ),
+                ],
+                onChanged: controller.selectPrinter,
+              ),
+            ),
+          ),
+          if (isMissing) ...[
+            const SizedBox(height: 6),
+            Text(
+              '"$selected" não está mais instalada. Escolha outra ou reconecte.',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                color: _accent,
+                height: 1.35,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Text(
+            'Largura da bobina',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              color: _darkBrown,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              for (final width in PaperWidth.values) ...[
+                Expanded(
+                  child: _PaperChip(
+                    label: width.label,
+                    selected: paper == width,
+                    onTap: () => controller.selectPaper(width),
+                  ),
+                ),
+                if (width != PaperWidth.values.last) const SizedBox(width: 8),
+              ],
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              onPressed: isTesting ? null : onTestPrint,
+              icon: isTesting
+                  ? const SizedBox(
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.print_outlined, size: 16),
+              label: Text(
+                isTesting ? 'Imprimindo…' : 'Imprimir teste',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: _darkBrown,
+                backgroundColor: const Color(0xFFF4F1ED),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(9),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaperChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PaperChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? _accent : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? _accent : const Color(0xFFDDD5CB),
+            ),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: selected ? Colors.white : _mutedText,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IconAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _IconAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Icon(icon, size: 16, color: _mutedText),
+        ),
       ),
     );
   }

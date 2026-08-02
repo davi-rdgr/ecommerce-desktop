@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:romeu_lanches_admin/core/format/currency.dart';
 import 'package:romeu_lanches_admin/core/network/api_exception.dart';
+import 'package:romeu_lanches_admin/core/printing/ticket_printer.dart';
+import 'package:romeu_lanches_admin/core/printing/windows_raw_printer.dart';
 import 'package:romeu_lanches_admin/features/home/data/order_service.dart';
 import 'package:romeu_lanches_admin/features/home/data/orders_realtime.dart';
 import 'package:romeu_lanches_admin/features/report/data/report_service.dart';
@@ -16,8 +18,14 @@ class HomeController {
   final OrderService _service;
   final ReportService _reportService;
   final OrdersRealtime _realtime;
+  final TicketPrinter _printer;
 
-  HomeController(this._service, this._reportService, this._realtime) {
+  HomeController(
+    this._service,
+    this._reportService,
+    this._realtime,
+    this._printer,
+  ) {
     _realtime.onOrderChanged = _applyRealtimeOrder;
     _realtime.onResync = refresh;
   }
@@ -40,6 +48,11 @@ class HomeController {
   /// Pedidos com um PATCH em voo — o card trava o botão para não disparar
   /// a mesma transição duas vezes no aperto do movimento.
   final pendingIds = signal<Set<String>>({});
+
+  /// Pedidos com uma comanda no spooler. Separado de [pendingIds] porque
+  /// imprimir não mexe no status: travar as duas coisas juntas impediria de
+  /// aceitar o pedido enquanto a comanda sai.
+  final printingIds = signal<Set<String>>({});
 
   final headerTitle = 'Pedidos';
   final headerSubtitle = 'Acompanhe e gerencie os pedidos em tempo real';
@@ -136,6 +149,28 @@ class HomeController {
 
   Future<OrderDetail> loadOrderDetail(String id) => _service.detail(id);
 
+  /// Manda a comanda para a térmica. Devolve `null` no sucesso, ou a mensagem
+  /// a exibir.
+  ///
+  /// Nada de recarregar ou mudar status aqui: imprimir é um efeito local, o
+  /// pedido segue exatamente onde estava. O atendente pode imprimir de novo
+  /// quantas vezes quiser — via caiu, papel acabou, entregador perdeu.
+  Future<String?> printTicket(Order order, OrderDetail detail) async {
+    if (printingIds.value.contains(order.id)) return null;
+    printingIds.value = {...printingIds.value, order.id};
+
+    try {
+      await _printer.printOrder(order: order, detail: detail);
+      return null;
+    } on PrinterException catch (e) {
+      return e.message;
+    } catch (e) {
+      return 'Falha ao imprimir a comanda: $e';
+    } finally {
+      printingIds.value = {...printingIds.value}..remove(order.id);
+    }
+  }
+
   /// Empurra o pedido para a próxima etapa, conforme o status atual.
   ///
   /// Devolve `null` em caso de sucesso, ou a mensagem a exibir.
@@ -224,6 +259,7 @@ class HomeController {
     orders.dispose();
     dailyReport.dispose();
     pendingIds.dispose();
+    printingIds.dispose();
     activeOrders.dispose();
     homeStats.dispose();
   }

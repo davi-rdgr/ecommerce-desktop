@@ -1,6 +1,10 @@
 import 'package:romeu_lanches_admin/components/scaffolds/scaffold/scaffold_controller.dart';
 import 'package:romeu_lanches_admin/core/navigation/app_messenger.dart';
 import 'package:romeu_lanches_admin/core/network/api_exception.dart';
+import 'package:romeu_lanches_admin/core/printing/paper_width.dart';
+import 'package:romeu_lanches_admin/core/printing/printer_settings.dart';
+import 'package:romeu_lanches_admin/core/printing/ticket_printer.dart';
+import 'package:romeu_lanches_admin/core/printing/windows_raw_printer.dart';
 import 'package:romeu_lanches_admin/features/shop/data/store_service.dart';
 import 'package:romeu_lanches_admin/models/business_hours.dart';
 import 'package:romeu_lanches_admin/models/store_config.dart';
@@ -9,8 +13,15 @@ import 'package:signals_flutter/signals_flutter.dart';
 class ShopController {
   final StoreService _service;
   final ScaffoldController _scaffold;
+  final PrinterSettings _printerSettings;
+  final TicketPrinter _printer;
 
-  ShopController(this._service, this._scaffold) {
+  ShopController(
+    this._service,
+    this._scaffold,
+    this._printerSettings,
+    this._printer,
+  ) {
     _scaffold.onToggleStore = toggleStore;
   }
 
@@ -32,9 +43,60 @@ class ShopController {
   Signal<bool> get isStoreOpen => _scaffold.isStoreOpen;
   Signal<bool> get isStoreBusy => _scaffold.isStoreBusy;
 
+  // ─── Impressora ────────────────────────────────────────────────────────────
+
+  /// Impressoras instaladas no Windows. Preenchida em [load] e por
+  /// [refreshPrinters] — a térmica costuma ser ligada depois do app abrir.
+  final availablePrinters = signal<List<String>>([]);
+
+  /// Cupom de teste no spooler.
+  final isTestingPrinter = signal(false);
+
+  Signal<String?> get selectedPrinter => _printerSettings.printerName;
+  Signal<PaperWidth> get paperWidth => _printerSettings.paperWidth;
+
+  /// A que vai receber a comanda de fato — a escolhida, ou a padrão do sistema
+  /// enquanto ninguém escolheu.
+  String? get effectivePrinter => _printerSettings.target;
+
+  void refreshPrinters() {
+    try {
+      availablePrinters.value = WindowsRawPrinter.list();
+    } on PrinterException {
+      // Lista vazia já comunica o problema na tela; derrubar a tela de Loja
+      // inteira porque o spooler não respondeu seria pior.
+      availablePrinters.value = const [];
+    }
+  }
+
+  Future<void> selectPrinter(String? name) =>
+      _printerSettings.selectPrinter(name);
+
+  Future<void> selectPaper(PaperWidth width) =>
+      _printerSettings.selectPaper(width);
+
+  /// Imprime o cupom de conferência. Devolve `null` no sucesso, ou a mensagem.
+  Future<String?> testPrint() async {
+    if (isTestingPrinter.value) return null;
+    isTestingPrinter.value = true;
+
+    try {
+      await _printer.printTest();
+      return null;
+    } on PrinterException catch (e) {
+      return e.message;
+    } catch (e) {
+      return 'Falha ao imprimir o teste: $e';
+    } finally {
+      isTestingPrinter.value = false;
+    }
+  }
+
   Future<void> load() async {
     isLoading.value = true;
     loadError.value = null;
+    // Local e síncrono: não entra no try da API nem atrasa a tela.
+    refreshPrinters();
 
     try {
       final configRequest = _service.loadConfig();
@@ -126,5 +188,9 @@ class ShopController {
     loadError.dispose();
     isSavingConfig.dispose();
     savingWeekday.dispose();
+    availablePrinters.dispose();
+    isTestingPrinter.dispose();
+    // `selectedPrinter` e `paperWidth` são do PrinterSettings, que vive o app
+    // inteiro — quem descarta é ele, não esta tela.
   }
 }

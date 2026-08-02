@@ -18,6 +18,7 @@ Future<void> showOrderDetailDialog(
   required Future<OrderDetail> Function(String id) loadDetail,
   required Future<void> Function(Order order) onAdvance,
   required Future<void> Function(Order order) onCancel,
+  required Future<void> Function(Order order, OrderDetail detail) onPrint,
 }) {
   return showDialog(
     context: context,
@@ -26,6 +27,7 @@ Future<void> showOrderDetailDialog(
       loadDetail: loadDetail,
       onAdvance: onAdvance,
       onCancel: onCancel,
+      onPrint: onPrint,
     ),
   );
 }
@@ -40,12 +42,17 @@ class OrderDetailDialog extends StatefulWidget {
   final Future<void> Function(Order order) onAdvance;
   final Future<void> Function(Order order) onCancel;
 
+  /// Recebe os dois porque a comanda precisa do nome do cliente, que só existe
+  /// no resumo — o detalhe da API não traz esse campo (ver [OrderDetail]).
+  final Future<void> Function(Order order, OrderDetail detail) onPrint;
+
   const OrderDetailDialog({
     super.key,
     required this.order,
     required this.loadDetail,
     required this.onAdvance,
     required this.onCancel,
+    required this.onPrint,
   });
 
   @override
@@ -54,6 +61,7 @@ class OrderDetailDialog extends StatefulWidget {
 
 class _OrderDetailDialogState extends State<OrderDetailDialog> {
   late Future<OrderDetail> _future;
+  bool _isPrinting = false;
 
   @override
   void initState() {
@@ -63,6 +71,19 @@ class _OrderDetailDialogState extends State<OrderDetailDialog> {
 
   void _retry() =>
       setState(() => _future = widget.loadDetail(widget.order.id));
+
+  /// O spooler responde rápido, mas a modal pode ser fechada antes — daí o
+  /// `mounted` antes de mexer no estado.
+  Future<void> _print(OrderDetail detail) async {
+    if (_isPrinting) return;
+    setState(() => _isPrinting = true);
+
+    try {
+      await widget.onPrint(widget.order, detail);
+    } finally {
+      if (mounted) setState(() => _isPrinting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +112,12 @@ class _OrderDetailDialogState extends State<OrderDetailDialog> {
                       onRetry: _retry,
                     );
                   }
-                  return _DetailBody(detail: snapshot.data!);
+                  final detail = snapshot.data!;
+                  return _DetailBody(
+                    detail: detail,
+                    isPrinting: _isPrinting,
+                    onPrint: () => _print(detail),
+                  );
                 },
               ),
             ),
@@ -363,8 +389,14 @@ class _ErrorBody extends StatelessWidget {
 
 class _DetailBody extends StatelessWidget {
   final OrderDetail detail;
+  final VoidCallback onPrint;
+  final bool isPrinting;
 
-  const _DetailBody({required this.detail});
+  const _DetailBody({
+    required this.detail,
+    required this.onPrint,
+    required this.isPrinting,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -426,6 +458,8 @@ class _DetailBody extends StatelessWidget {
             _TotalRow(label: 'Taxa de entrega', value: detail.deliveryFee),
           const SizedBox(height: 6),
           _TotalRow(label: 'Total', value: detail.total, emphasized: true),
+          const SizedBox(height: 18),
+          Center(child: _PrintButton(onPressed: onPrint, isBusy: isPrinting)),
         ],
       ),
     );
@@ -554,6 +588,61 @@ class _TotalRow extends StatelessWidget {
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Manda a comanda para a térmica.
+///
+/// Fica sempre habilitado, em qualquer status: reimprimir é o conserto normal
+/// para papel que acabou, comanda perdida ou entregador trocado.
+class _PrintButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  final bool isBusy;
+
+  const _PrintButton({required this.onPressed, required this.isBusy});
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: isBusy ? SystemMouseCursors.basic : SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: isBusy ? null : onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          decoration: BoxDecoration(
+            color: isBusy ? const Color(0xFFEBB5AE) : const Color(0xFFE23725),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isBusy)
+                const SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              else
+                const Icon(Icons.print_outlined, size: 15, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                isBusy ? 'Imprimindo…' : 'Imprimir comanda',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

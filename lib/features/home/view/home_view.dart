@@ -5,6 +5,7 @@ import 'package:romeu_lanches_admin/features/home/components/order_detail_dialog
 import 'package:romeu_lanches_admin/features/home/data/orders_realtime.dart';
 import 'package:romeu_lanches_admin/features/home/view/home_controller.dart';
 import 'package:romeu_lanches_admin/models/order.dart';
+import 'package:romeu_lanches_admin/models/order_detail.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -42,11 +43,17 @@ class _HomeViewState extends State<HomeView> {
     loadDetail: _controller.loadOrderDetail,
     onAdvance: _advance,
     onCancel: _cancel,
+    onPrint: _print,
   );
 
   Future<void> _advance(Order order) async {
     final message = await _controller.advance(order);
     if (message != null) _showMessage(message);
+  }
+
+  Future<void> _print(Order order, OrderDetail detail) async {
+    final message = await _controller.printTicket(order, detail);
+    _showMessage(message ?? 'Comanda #${detail.number} enviada para impressão.');
   }
 
   Future<void> _cancel(Order order) async {

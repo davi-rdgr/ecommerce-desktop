@@ -17,6 +17,8 @@ dependencies:
   signals_flutter: ^7.1.0
   http: ^1.6.0
   stomp_dart_client: ^3.0.1
+  win32: ^6.3.0
+  ffi: ^2.2.0
 
 dev_dependencies:
   flutter_test:

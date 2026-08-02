@@ -3,12 +3,15 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'core/di/app_dependencies.dart';
 import 'core/navigation/app_messenger.dart';
 import 'core/navigation/app_navigator.dart';
+import 'core/printing/printer_settings.dart';
 import 'splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
-  deps = AppDependencies();
+  // A box da impressora abre antes das dependências: o construtor de
+  // AppDependencies é síncrono e já monta o TicketPrinter com ela.
+  deps = AppDependencies(await PrinterSettings.open());
   runApp(const MyApp());
 }
 
