@@ -4,14 +4,19 @@ import 'core/di/app_dependencies.dart';
 import 'core/navigation/app_messenger.dart';
 import 'core/navigation/app_navigator.dart';
 import 'core/printing/printer_settings.dart';
+import 'core/sound/new_order_alert.dart';
 import 'splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
-  // A box da impressora abre antes das dependências: o construtor de
-  // AppDependencies é síncrono e já monta o TicketPrinter com ela.
-  deps = AppDependencies(await PrinterSettings.open());
+  // A box da impressora e o WAV do aviso abrem antes das dependências: o
+  // construtor de AppDependencies é síncrono e já monta o TicketPrinter e o
+  // painel com eles.
+  deps = AppDependencies(
+    await PrinterSettings.open(),
+    await NewOrderAlert.open(),
+  );
   runApp(const MyApp());
 }
 

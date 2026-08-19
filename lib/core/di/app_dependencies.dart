@@ -10,6 +10,7 @@ import 'package:romeu_lanches_admin/core/navigation/fade_route.dart';
 import 'package:romeu_lanches_admin/core/network/api_client.dart';
 import 'package:romeu_lanches_admin/core/printing/printer_settings.dart';
 import 'package:romeu_lanches_admin/core/printing/ticket_printer.dart';
+import 'package:romeu_lanches_admin/core/sound/new_order_alert.dart';
 import 'package:romeu_lanches_admin/features/login/view/login_route.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 
@@ -26,9 +27,10 @@ class AppDependencies {
   late final ShopFullDependencies shopFullDependencies;
   late final ReportFullDependencies reportFullDependencies;
 
-  /// [printerSettings] chega pronto porque abrir a box do Hive é assíncrono e
-  /// este construtor não é — `main` abre antes de montar as dependências.
-  AppDependencies(PrinterSettings printerSettings) {
+  /// [printerSettings] e [newOrderAlert] chegam prontos porque abrir a box do
+  /// Hive e carregar o WAV são assíncronos e este construtor não é — `main`
+  /// abre os dois antes de montar as dependências.
+  AppDependencies(PrinterSettings printerSettings, NewOrderAlert newOrderAlert) {
     session = AuthSession();
     apiClient = ApiClient(session);
     ticketPrinter = TicketPrinter(printerSettings);
@@ -41,6 +43,7 @@ class AppDependencies {
       session,
       reportFullDependencies.reportService,
       ticketPrinter,
+      newOrderAlert,
     );
     menuFullDependencies = MenuFullDependencies(apiClient);
     shopFullDependencies = ShopFullDependencies(

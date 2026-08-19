@@ -4,6 +4,7 @@ import 'package:romeu_lanches_admin/core/format/currency.dart';
 import 'package:romeu_lanches_admin/core/network/api_exception.dart';
 import 'package:romeu_lanches_admin/core/printing/ticket_printer.dart';
 import 'package:romeu_lanches_admin/core/printing/windows_raw_printer.dart';
+import 'package:romeu_lanches_admin/core/sound/new_order_alert.dart';
 import 'package:romeu_lanches_admin/features/home/data/order_service.dart';
 import 'package:romeu_lanches_admin/features/home/data/orders_realtime.dart';
 import 'package:romeu_lanches_admin/features/report/data/report_service.dart';
@@ -19,12 +20,14 @@ class HomeController {
   final ReportService _reportService;
   final OrdersRealtime _realtime;
   final TicketPrinter _printer;
+  final NewOrderAlert _alert;
 
   HomeController(
     this._service,
     this._reportService,
     this._realtime,
     this._printer,
+    this._alert,
   ) {
     _realtime.onOrderChanged = _applyRealtimeOrder;
     _realtime.onResync = refresh;
@@ -231,6 +234,13 @@ class HomeController {
     orders.value = index >= 0
         ? ([...current]..[index] = order)
         : [...current, order];
+
+    // Só toca em pedido que **entrou** agora na coluna de novos. `index >= 0`
+    // é eco de status (inclusive o do nosso próprio PATCH), e um pedido que
+    // aparece já em preparo é outro atendente trabalhando — nenhum dos dois
+    // precisa chamar ninguém para o balcão. A recarga do `onResync` nem passa
+    // por aqui, então reconectar não faz o sino tocar em série.
+    if (index < 0 && order.status == OrderStatus.newOrder) _alert.play();
 
     // Outro atendente concluiu: o número do topo é do servidor, não dá para
     // somar aqui. Vale a chamada extra quando o concluído foi nosso — o eco do
