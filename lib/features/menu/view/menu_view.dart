@@ -6,6 +6,7 @@ import 'package:romeu_lanches_admin/models/addition.dart';
 import 'package:romeu_lanches_admin/models/category.dart';
 import 'package:romeu_lanches_admin/models/product.dart';
 import 'package:flutter/cupertino.dart' hide MenuController;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide MenuController;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -125,7 +126,9 @@ class _MenuViewState extends State<MenuView> {
       final error = _controller.loadError.value;
       return _EmptyState(
         message: error ?? 'Nenhuma categoria cadastrada ainda.',
-        actionLabel: error == null ? 'Criar primeira categoria' : 'Tentar novamente',
+        actionLabel: error == null
+            ? 'Criar primeira categoria'
+            : 'Tentar novamente',
         onAction: error == null ? _newCategory : _controller.load,
       );
     }
@@ -156,16 +159,20 @@ class _MenuViewState extends State<MenuView> {
                         category: selected,
                         products: _controller.visibleProducts.value,
                         isPending: _controller.isPending,
-                        onToggleAvailable: (p) async =>
-                            _report(await _controller.toggleProductAvailable(p)),
+                        onToggleAvailable: (p) async => _report(
+                          await _controller.toggleProductAvailable(p),
+                        ),
                         onSavePrice: (p, price) async => _report(
-                          await _controller.saveProduct(p.copyWith(price: price)),
+                          await _controller.saveProduct(
+                            p.copyWith(price: price),
+                          ),
                         ),
                         onEdit: _editProduct,
                         onNew: () => _newProduct(selected.id),
                         onRename: () => _renameCategory(selected),
-                        onToggleActive: () async =>
-                            _report(await _controller.toggleCategoryActive(selected)),
+                        onToggleActive: () async => _report(
+                          await _controller.toggleCategoryActive(selected),
+                        ),
                       ),
                       const SizedBox(height: 16),
                       _AdditionsCard(
@@ -178,7 +185,9 @@ class _MenuViewState extends State<MenuView> {
                         onToggleActive: (a) async =>
                             _report(await _controller.toggleAdditionActive(a)),
                         onSavePrice: (a, price) async => _report(
-                          await _controller.saveAddition(a.copyWith(price: price)),
+                          await _controller.saveAddition(
+                            a.copyWith(price: price),
+                          ),
                         ),
                         onEdit: _editAddition,
                         onNew: _newAddition,
@@ -197,7 +206,7 @@ class _MenuViewState extends State<MenuView> {
 
 // ─── Abas de categoria ────────────────────────────────────────────────────────
 
-class _CategoryTabs extends StatelessWidget {
+class _CategoryTabs extends StatefulWidget {
   final List<Category> categories;
   final String? selectedId;
   final void Function(String id) onSelect;
@@ -211,48 +220,90 @@ class _CategoryTabs extends StatelessWidget {
   });
 
   @override
+  State<_CategoryTabs> createState() => _CategoryTabsState();
+}
+
+class _CategoryTabsState extends State<_CategoryTabs> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// A faixa só rola na horizontal, então a roda do mouse (vertical) é
+  /// convertida para ela — senão quem não tem Shift à mão não alcança as
+  /// categorias de fora.
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final delta = event.scrollDelta.dx != 0
+        ? event.scrollDelta.dx
+        : event.scrollDelta.dy;
+    position.jumpTo(
+      (position.pixels + delta).clamp(0.0, position.maxScrollExtent),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 32),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (final category in categories) ...[
-              _CategoryTab(
-                category: category,
-                isActive: category.id == selectedId,
-                onTap: () => onSelect(category.id),
+      padding: const EdgeInsets.fromLTRB(32, 20, 32, 12),
+      child: Listener(
+        onPointerSignal: _onPointerSignal,
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(
+            context,
+          ).copyWith(dragDevices: {...PointerDeviceKind.values}),
+          child: Scrollbar(
+            controller: _scrollController,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildTabs(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabs() {
+    return Row(
+      children: [
+        for (final category in widget.categories) ...[
+          _CategoryTab(
+            category: category,
+            isActive: category.id == widget.selectedId,
+            onTap: () => widget.onSelect(category.id),
+          ),
+          const SizedBox(width: 8),
+        ],
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: widget.onNew,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(color: const Color(0xFFDDD5CB)),
               ),
-              const SizedBox(width: 8),
-            ],
-            MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                onTap: onNew,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(11),
-                    border: Border.all(color: const Color(0xFFDDD5CB)),
-                  ),
-                  child: Text(
-                    '+ Categoria',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: _mutedText,
-                    ),
-                  ),
+              child: Text(
+                '+ Categoria',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _mutedText,
                 ),
               ),
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -402,8 +453,14 @@ class _ItemsCard extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text('ITEM', style: _headerStyle)),
-              SizedBox(width: 140, child: Text('PREÇO (R\$)', style: _headerStyle)),
-              SizedBox(width: 110, child: Text('DISPONÍVEL', style: _headerStyle)),
+              SizedBox(
+                width: 140,
+                child: Text('PREÇO (R\$)', style: _headerStyle),
+              ),
+              SizedBox(
+                width: 110,
+                child: Text('DISPONÍVEL', style: _headerStyle),
+              ),
               const SizedBox(width: 36),
             ],
           ),
@@ -601,7 +658,10 @@ class _ProductRowState extends State<_ProductRow> {
           ),
           SizedBox(
             width: 36,
-            child: _IconAction(icon: Icons.mode_edit_outline, onTap: widget.onEdit),
+            child: _IconAction(
+              icon: Icons.mode_edit_outline,
+              onTap: widget.onEdit,
+            ),
           ),
         ],
       ),
@@ -629,7 +689,8 @@ class _ProductThumb extends StatelessWidget {
                 url,
                 fit: BoxFit.cover,
                 // Link quebrado é comum quando a URL é digitada à mão.
-                errorBuilder: (_, _, _) => CustomPaint(painter: _StripesPainter()),
+                errorBuilder: (_, _, _) =>
+                    CustomPaint(painter: _StripesPainter()),
               ),
       ),
     );
@@ -649,7 +710,11 @@ class _StripesPainter extends CustomPainter {
 
     const gap = 7.0;
     for (double d = -size.height; d < size.width + size.height; d += gap) {
-      canvas.drawLine(Offset(d, size.height), Offset(d + size.height, 0), paint);
+      canvas.drawLine(
+        Offset(d, size.height),
+        Offset(d + size.height, 0),
+        paint,
+      );
     }
   }
 
@@ -876,10 +941,7 @@ class _AdditionRowState extends State<_AdditionRow> {
           ),
           Text(
             '+R\$',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              color: _mutedText,
-            ),
+            style: GoogleFonts.plusJakartaSans(fontSize: 12, color: _mutedText),
           ),
           const SizedBox(width: 4),
           SizedBox(

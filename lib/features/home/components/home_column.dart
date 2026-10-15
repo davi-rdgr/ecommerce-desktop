@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 class HomeColumn extends StatelessWidget {
   final String label;
   final Color color;
+  final double width;
   final List<Order> orders;
   final void Function(Order order) onOrderTap;
   final void Function(Order order) onAdvance;
@@ -18,6 +19,7 @@ class HomeColumn extends StatelessWidget {
     super.key,
     required this.label,
     required this.color,
+    required this.width,
     required this.orders,
     required this.onOrderTap,
     required this.onAdvance,
@@ -35,7 +37,7 @@ class HomeColumn extends StatelessWidget {
 
         return Container(
           padding: const EdgeInsets.all(10),
-          width: 300,
+          width: width,
           decoration: BoxDecoration(
             color: const Color(0XFFEFEAE3),
             borderRadius: BorderRadius.circular(18),

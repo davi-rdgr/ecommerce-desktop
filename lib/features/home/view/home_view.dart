@@ -6,6 +6,7 @@ import 'package:romeu_lanches_admin/features/home/data/orders_realtime.dart';
 import 'package:romeu_lanches_admin/features/home/view/home_controller.dart';
 import 'package:romeu_lanches_admin/models/order.dart';
 import 'package:romeu_lanches_admin/models/order_detail.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:signals_flutter/signals_flutter.dart';
@@ -201,18 +202,21 @@ class _HomeViewState extends State<HomeView> {
       );
     }
 
-    return Scrollbar(
-      controller: _scrollController,
-      child: SingleChildScrollView(
-        controller: _scrollController,
-        scrollDirection: Axis.horizontal,
-        child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final count = HomeController.columns.length;
+        final totalSpacing = _columnSpacing * (count - 1);
+        final fitWidth = (constraints.maxWidth - totalSpacing) / count;
+        final fits = fitWidth >= _minColumnWidth;
+
+        Widget board(double columnWidth) => Row(
           crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: 16,
+          spacing: _columnSpacing,
           children: HomeController.columns
               .map((col) => HomeColumn(
                     label: col.label,
                     color: col.color,
+                    width: columnWidth,
                     orders: orders
                         .where((o) => o.status == col.status)
                         .toList(),
@@ -222,10 +226,35 @@ class _HomeViewState extends State<HomeView> {
                     pendingIds: _controller.pendingIds.value,
                   ))
               .toList(),
-        ),
-      ),
+        );
+
+        // Cabendo, as colunas dividem a largura toda. Tela estreita: mantém a
+        // largura mínima e rola na horizontal — com barra sempre visível e
+        // arraste pelo mouse, porque a roda do mouse já rola os cards.
+        if (fits) return board(fitWidth);
+
+        return ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            dragDevices: {...PointerDeviceKind.values},
+          ),
+          child: Scrollbar(
+            controller: _scrollController,
+            thumbVisibility: true,
+            trackVisibility: true,
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(bottom: 16),
+              child: board(_minColumnWidth),
+            ),
+          ),
+        );
+      },
     );
   }
+
+  static const double _minColumnWidth = 280;
+  static const double _columnSpacing = 16;
 }
 
 /// Sem isso, canal caído é indistinguível de noite fraca: a tela fica parada
