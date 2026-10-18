@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:romeu_lanches_admin/core/auth/auth_session.dart';
+import 'package:romeu_lanches_admin/core/config/app_environment.dart';
 import 'package:romeu_lanches_admin/core/network/api_config.dart';
 import 'package:romeu_lanches_admin/core/network/api_exception.dart';
 
@@ -37,12 +38,16 @@ class ApiClient {
   Future<dynamic> delete(String path) => _send('DELETE', path);
 
   Future<dynamic> _send(String method, String path, {Object? body}) async {
-    final request = http.Request(method, Uri.parse('${ApiConfig.baseUrl}$path'))
-      ..headers.addAll({
-        'Accept': 'application/json',
-        if (body != null) 'Content-Type': 'application/json',
-        ..._session.authHeader,
-      });
+    final request =
+        http.Request(
+            method,
+            Uri.parse('${AppEnvironment.current.baseUrl}$path'),
+          )
+          ..headers.addAll({
+            'Accept': 'application/json',
+            if (body != null) 'Content-Type': 'application/json',
+            ..._session.authHeader,
+          });
 
     if (body != null) request.body = jsonEncode(body);
 
@@ -94,9 +99,7 @@ class ApiClient {
       statusCode: status,
       message: json?['error'] as String? ?? _defaultMessage(status),
       code: json?['code'] as String?,
-      fields: campos is Map
-          ? campos.map((k, v) => MapEntry('$k', '$v'))
-          : null,
+      fields: campos is Map ? campos.map((k, v) => MapEntry('$k', '$v')) : null,
     );
   }
 

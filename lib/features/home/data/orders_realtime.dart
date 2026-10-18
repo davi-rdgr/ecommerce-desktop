@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:romeu_lanches_admin/core/auth/auth_session.dart';
-import 'package:romeu_lanches_admin/core/network/api_config.dart';
+import 'package:romeu_lanches_admin/core/config/app_environment.dart';
 import 'package:romeu_lanches_admin/models/order.dart';
 import 'package:signals_flutter/signals_flutter.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
@@ -56,7 +56,7 @@ class OrdersRealtime {
 
     _client = StompClient(
       config: StompConfig.sockJS(
-        url: '${ApiConfig.baseUrl}/ws',
+        url: AppEnvironment.current.wsUrl,
         // A autenticação acontece no frame CONNECT, não no handshake HTTP.
         stompConnectHeaders: {'Authorization': 'Bearer $token'},
         reconnectDelay: const Duration(seconds: 5),
