@@ -1,11 +1,11 @@
 import 'package:signals_flutter/signals_flutter.dart';
 
-/// Sessão do admin, mantida **apenas em memória**.
+/// Sessão do admin aberta agora, em memória.
 ///
-/// O turno vai das 18h à meia-noite e o JWT dura 24h, então não há expiração
-/// durante o uso e não existe refresh token no backend. Nada é gravado em disco:
-/// fechou o app, precisa logar de novo — o que evita credencial em repouso na
-/// máquina do balcão.
+/// O token também fica guardado, cifrado com o DPAPI do Windows
+/// (`SavedSession`), para a entrada com um clique — a senha, nunca. O JWT do
+/// admin dura 30 dias e não existe refresh token: venceu, a próxima chamada
+/// volta 401 e o app manda para o login.
 class AuthSession {
   final token = signal<String?>(null);
   final adminName = signal<String?>(null);

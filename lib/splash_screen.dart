@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'core/di/app_dependencies.dart';
 import 'core/navigation/fade_route.dart';
 import 'features/login/view/login_route.dart';
 
@@ -32,7 +33,12 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    Future.delayed(const Duration(milliseconds: 2200), () {
+    // O token salvo é lido durante a animação: a tela de login já abre sabendo
+    // se mostra a entrada rápida, e o foco vai direto para o botão.
+    Future.wait([
+      Future<void>.delayed(const Duration(milliseconds: 2200)),
+      deps.loginFullDependencies.login.loadSaved(),
+    ]).then((_) {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(fadeRoute(const LoginRoute()));
     });

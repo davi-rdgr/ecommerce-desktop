@@ -30,6 +30,12 @@ class _LoginViewState extends State<LoginView> {
   bool _obscurePassword = true;
 
   @override
+  void initState() {
+    super.initState();
+    widget.controller.loadSaved();
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
@@ -45,6 +51,11 @@ class _LoginViewState extends State<LoginView> {
       password: _passwordController.text,
     );
 
+    if (success && mounted) widget.onLoggedIn();
+  }
+
+  Future<void> _quickLogin() async {
+    final success = await widget.controller.quickLogin();
     if (success && mounted) widget.onLoggedIn();
   }
 
@@ -109,11 +120,48 @@ class _LoginViewState extends State<LoginView> {
             ),
           ),
           const SizedBox(height: 32),
+          SignalBuilder(
+            builder: (context) {
+              final saved = widget.controller.savedLogin.value;
+              if (saved == null) return const SizedBox.shrink();
+              final name = saved.adminName.trim();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _QuickLoginButton(
+                    label: name.isEmpty ? 'Entrar' : 'Continuar como $name',
+                    isLoading: widget.controller.isLoading.value,
+                    onPressed: _quickLogin,
+                  ),
+                  const SizedBox(height: 28),
+                  Row(
+                    children: [
+                      const Expanded(child: Divider(color: Color(0xFFE2D9CF))),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          'ou entre com outra conta',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            color: _mutedText,
+                          ),
+                        ),
+                      ),
+                      const Expanded(child: Divider(color: Color(0xFFE2D9CF))),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              );
+            },
+          ),
           _buildLabel('E-mail'),
           const SizedBox(height: 8),
           TextFormField(
             controller: _emailController,
-            autofocus: true,
+            // Com entrada rápida o foco no campo só atrapalharia: o Enter
+            // não deve cair no formulário em vez do botão grande.
+            autofocus: widget.controller.savedLogin.value == null,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
             decoration: _fieldDecoration(hint: 'admin@romeu.com'),
@@ -264,6 +312,83 @@ class _SubmitButton extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Entrada com um clique pelo token salvo. Maior e mais chamativo que o
+/// "Entrar" do formulário: é o caminho do dia a dia.
+class _QuickLoginButton extends StatelessWidget {
+  final String label;
+  final bool isLoading;
+  final VoidCallback onPressed;
+
+  const _QuickLoginButton({
+    required this.label,
+    required this.isLoading,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 64,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            colors: isLoading
+                ? const [Color(0xFFD9836F), Color(0xFFE0A06B)]
+                : const [Color(0xFFE23725), Color(0xFFF97316)],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFE23725).withValues(alpha: 0.25),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: isLoading ? null : onPressed,
+          autofocus: true,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            disabledBackgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: isLoading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: Colors.white,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.login_rounded, color: Colors.white),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(
+                        label,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
         ),
       ),

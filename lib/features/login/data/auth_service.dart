@@ -17,4 +17,10 @@ class AuthService {
     );
     return LoginResponse.fromJson(json as Map<String, dynamic>);
   }
+
+  /// Confere se um token salvo ainda é aceito, sem abrir sessão com ele.
+  /// `GET /admin/config` é a chamada de admin mais leve que existe; lança
+  /// [ApiException] com 401 se o token venceu ou foi invalidado.
+  Future<void> checkToken(String token) =>
+      _api.get('/admin/config', bearer: token);
 }

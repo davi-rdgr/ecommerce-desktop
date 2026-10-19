@@ -72,6 +72,41 @@ class _HeaderState extends State<Header> {
         .join();
   }
 
+  /// "Sair" fica escondido no menu do avatar e ainda pede confirmação: sair
+  /// apaga o token salvo e obriga a digitar a senha na próxima vez.
+  Future<void> _confirmLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Sair do painel?',
+          style: GoogleFonts.bricolageGrotesque(
+            fontWeight: FontWeight.w800,
+            color: const Color(0XFF2A1F17),
+          ),
+        ),
+        content: Text(
+          'Para entrar de novo será preciso digitar o e-mail e a senha.',
+          style: GoogleFonts.plusJakartaSans(fontSize: 13.5, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0XFFE23725),
+            ),
+            child: const Text('Sair'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await deps.logout();
+  }
+
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
@@ -129,8 +164,35 @@ class _HeaderState extends State<Header> {
                 SignalBuilder(
                   builder: (context) {
                     final name = deps.session.adminName.value;
-                    return Tooltip(
-                      message: name ?? 'Sessão do administrador',
+                    return PopupMenuButton<String>(
+                      onSelected: (_) => _confirmLogout(),
+                      tooltip: name ?? 'Sessão do administrador',
+                      offset: const Offset(0, 50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      itemBuilder: (context) => [
+                        PopupMenuItem<String>(
+                          value: 'logout',
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.logout,
+                                size: 17,
+                                color: Color(0XFF998875),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                'Sair',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  color: const Color(0XFF2A1F17),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       child: Container(
                         height: 42,
                         width: 42,

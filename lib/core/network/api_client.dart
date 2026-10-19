@@ -24,7 +24,11 @@ class ApiClient {
   ApiClient(this._session, {http.Client? httpClient})
     : _http = httpClient ?? http.Client();
 
-  Future<dynamic> get(String path) => _send('GET', path);
+  /// [bearer] usa esse token em vez do da sessão — serve para testar um token
+  /// salvo **antes** de abrir a sessão com ele. Nesse modo um 401 não dispara
+  /// [onUnauthorized]: quem chamou é que decide o que fazer.
+  Future<dynamic> get(String path, {String? bearer}) =>
+      _send('GET', path, bearer: bearer);
 
   Future<dynamic> post(String path, {Object? body}) =>
       _send('POST', path, body: body);
@@ -37,7 +41,12 @@ class ApiClient {
 
   Future<dynamic> delete(String path) => _send('DELETE', path);
 
-  Future<dynamic> _send(String method, String path, {Object? body}) async {
+  Future<dynamic> _send(
+    String method,
+    String path, {
+    Object? body,
+    String? bearer,
+  }) async {
     final request =
         http.Request(
             method,
@@ -46,7 +55,10 @@ class ApiClient {
           ..headers.addAll({
             'Accept': 'application/json',
             if (body != null) 'Content-Type': 'application/json',
-            ..._session.authHeader,
+            if (bearer == null)
+              ..._session.authHeader
+            else
+              'Authorization': 'Bearer $bearer',
           });
 
     if (body != null) request.body = jsonEncode(body);
@@ -54,7 +66,7 @@ class ApiClient {
     try {
       final streamed = await _http.send(request).timeout(ApiConfig.timeout);
       final response = await http.Response.fromStream(streamed);
-      return _handle(response);
+      return _handle(response, notifyUnauthorized: bearer == null);
     } on TimeoutException {
       throw const ApiException.network(
         'O servidor demorou demais para responder.',
@@ -68,7 +80,7 @@ class ApiClient {
     }
   }
 
-  dynamic _handle(http.Response response) {
+  dynamic _handle(http.Response response, {required bool notifyUnauthorized}) {
     final status = response.statusCode;
     // O backend responde em UTF-8, mas sem charset no header — sem isso os
     // acentos das mensagens de erro chegam quebrados.
@@ -79,7 +91,9 @@ class ApiClient {
       return jsonDecode(body);
     }
 
-    if (status == 401 && _session.token.value != null) onUnauthorized?.call();
+    if (status == 401 && notifyUnauthorized && _session.token.value != null) {
+      onUnauthorized?.call();
+    }
 
     throw _errorFrom(status, body);
   }
