@@ -54,6 +54,8 @@ class ShopController {
 
   Signal<String?> get selectedPrinter => _printerSettings.printerName;
   Signal<PaperWidth> get paperWidth => _printerSettings.paperWidth;
+  Signal<int> get ticketCopies => _printerSettings.ticketCopies;
+  List<int> get copyOptions => PrinterSettings.copyOptions;
 
   /// A que vai receber a comanda de fato — a escolhida, ou a padrão do sistema
   /// enquanto ninguém escolheu.
@@ -74,6 +76,9 @@ class ShopController {
 
   Future<void> selectPaper(PaperWidth width) =>
       _printerSettings.selectPaper(width);
+
+  Future<void> selectCopies(int copies) =>
+      _printerSettings.selectCopies(copies);
 
   /// Imprime o cupom de conferência. Devolve `null` no sucesso, ou a mensagem.
   Future<String?> testPrint() async {
@@ -190,7 +195,7 @@ class ShopController {
     savingWeekday.dispose();
     availablePrinters.dispose();
     isTestingPrinter.dispose();
-    // `selectedPrinter` e `paperWidth` são do PrinterSettings, que vive o app
-    // inteiro — quem descarta é ele, não esta tela.
+    // `selectedPrinter`, `paperWidth` e `ticketCopies` são do PrinterSettings,
+    // que vive o app inteiro — quem descarta é ele, não esta tela.
   }
 }

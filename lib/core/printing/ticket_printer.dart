@@ -14,16 +14,22 @@ class TicketPrinter {
 
   const TicketPrinter(this._settings);
 
+  /// Sai o número de vias configurado em [PrinterSettings.ticketCopies], uma
+  /// depois da outra — cada via já termina no corte, então viram tiras
+  /// separadas. Se uma via falhar, as seguintes nem vão para o spooler.
   Future<void> printOrder({
     required Order order,
     required OrderDetail detail,
-  }) {
+  }) async {
     final bytes = OrderTicket.build(
       order: order,
       detail: detail,
       paper: _settings.paperWidth.value,
     );
-    return _send(bytes, 'Comanda #${detail.number}');
+    final copies = _settings.ticketCopies.value;
+    for (var i = 0; i < copies; i++) {
+      await _send(bytes, 'Comanda #${detail.number}');
+    }
   }
 
   /// Cupom de conferência da tela de Loja. A régua numerada existe para

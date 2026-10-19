@@ -877,6 +877,7 @@ class _PrinterCard extends StatelessWidget {
     final printers = controller.availablePrinters.value;
     final selected = controller.selectedPrinter.value;
     final paper = controller.paperWidth.value;
+    final copies = controller.ticketCopies.value;
     final isTesting = controller.isTestingPrinter.value;
 
     // A escolhida pode ter sumido (impressora removida, PC trocado). Mostrar o
@@ -985,6 +986,39 @@ class _PrinterCard extends StatelessWidget {
                 if (width != PaperWidth.values.last) const SizedBox(width: 8),
               ],
             ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Vias da comanda',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              color: _darkBrown,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              for (final option in controller.copyOptions) ...[
+                Expanded(
+                  child: _PaperChip(
+                    label: option == 1 ? '1 via' : '$option vias',
+                    selected: copies == option,
+                    onTap: () => controller.selectCopies(option),
+                  ),
+                ),
+                if (option != controller.copyOptions.last)
+                  const SizedBox(width: 8),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Com 2 vias, cada comanda sai duas vezes: cozinha e balcão/entrega.',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              color: _mutedText,
+              height: 1.35,
+            ),
           ),
           const SizedBox(height: 14),
           SizedBox(

@@ -12,6 +12,11 @@ class PrinterSettings {
   static const _boxName = 'printer';
   static const _keyPrinter = 'name';
   static const _keyPaper = 'paper';
+  static const _keyCopies = 'copies';
+
+  /// Vias aceitas: uma para a cozinha, e opcionalmente outra para o
+  /// balcão/entrega.
+  static const copyOptions = [1, 2];
 
   final Box _box;
 
@@ -20,9 +25,18 @@ class PrinterSettings {
 
   final Signal<PaperWidth> paperWidth;
 
+  /// Quantas vias de cada comanda saem. Padrão 1.
+  final Signal<int> ticketCopies;
+
   PrinterSettings._(this._box)
     : printerName = signal(_box.get(_keyPrinter) as String?),
-      paperWidth = signal(PaperWidth.fromName(_box.get(_keyPaper) as String?));
+      paperWidth = signal(PaperWidth.fromName(_box.get(_keyPaper) as String?)),
+      ticketCopies = signal(_copiesFrom(_box.get(_keyCopies)));
+
+  /// Valor estranho na box (versão futura, edição na mão) volta para 1 via em
+  /// vez de imprimir uma pilha de comandas.
+  static int _copiesFrom(Object? raw) =>
+      copyOptions.contains(raw) ? raw as int : copyOptions.first;
 
   static Future<PrinterSettings> open() async =>
       PrinterSettings._(await Hive.openBox(_boxName));
@@ -45,8 +59,15 @@ class PrinterSettings {
     await _box.put(_keyPaper, width.name);
   }
 
+  Future<void> selectCopies(int copies) async {
+    if (!copyOptions.contains(copies)) return;
+    ticketCopies.value = copies;
+    await _box.put(_keyCopies, copies);
+  }
+
   void dispose() {
     printerName.dispose();
     paperWidth.dispose();
+    ticketCopies.dispose();
   }
 }

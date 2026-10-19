@@ -31,14 +31,29 @@ class HomeController {
   ) {
     _realtime.onOrderChanged = _applyRealtimeOrder;
     _realtime.onResync = refresh;
+    _reminderEffect = effect(_syncReminder);
   }
+
+  /// De quanto em quanto tempo o aviso volta a tocar enquanto houver pedido
+  /// parado em NOVO.
+  static const newOrderReminderInterval = Duration(minutes: 1);
 
   /// Estado do canal de tempo real, exibido no painel.
   Signal<RealtimeStatus> get realtimeStatus => _realtime.status;
 
-  void startRealtime() => _realtime.start();
+  void startRealtime() {
+    _realtime.start();
+    _remindersOn = true;
+    _syncReminder();
+  }
 
-  void stopRealtime() => _realtime.stop();
+  /// Também cala o lembrete: sem canal (sessão derrubada, tela de login) a
+  /// lista de pedidos está velha e o sino tocaria por pedido que ninguém vê.
+  void stopRealtime() {
+    _realtime.stop();
+    _remindersOn = false;
+    _syncReminder();
+  }
 
   final isLoading = signal(false);
   final loadError = signal<String?>(null);
@@ -56,6 +71,18 @@ class HomeController {
   /// imprimir não mexe no status: travar as duas coisas juntas impediria de
   /// aceitar o pedido enquanto a comanda sai.
   final printingIds = signal<Set<String>>({});
+
+  /// Algum pedido ainda esperando o aceite. É `computed` para o efeito do
+  /// lembrete só acordar quando isso vira — não a cada card que anda.
+  late final _hasUnconfirmed = computed(
+    () => orders.value.any((o) => o.status == OrderStatus.newOrder),
+  );
+
+  /// Um timer só para todos os pedidos em NOVO: com três parados, o balcão
+  /// ouve um lembrete por minuto, não três.
+  Timer? _reminder;
+  bool _remindersOn = false;
+  late final void Function() _reminderEffect;
 
   final headerTitle = 'Pedidos';
   final headerSubtitle = 'Acompanhe e gerencie os pedidos em tempo real';
@@ -240,12 +267,38 @@ class HomeController {
     // aparece já em preparo é outro atendente trabalhando — nenhum dos dois
     // precisa chamar ninguém para o balcão. A recarga do `onResync` nem passa
     // por aqui, então reconectar não faz o sino tocar em série.
-    if (index < 0 && order.status == OrderStatus.newOrder) _alert.play();
+    if (index < 0 && order.status == OrderStatus.newOrder) {
+      _alert.play();
+      // Acabou de tocar: o próximo lembrete conta a partir de agora, senão
+      // um timer já rodando por outro pedido tocaria de novo segundos depois.
+      _restartReminder();
+    }
 
     // Outro atendente concluiu: o número do topo é do servidor, não dá para
     // somar aqui. Vale a chamada extra quando o concluído foi nosso — o eco do
     // nosso próprio PATCH cai aqui também.
     if (order.status == OrderStatus.finished) unawaited(loadDailyStats());
+  }
+
+  /// Liga o lembrete quando aparece pedido em NOVO e desliga quando o último
+  /// é aceito (ou cancelado). Roda dentro de um `effect`, então reage sozinho a
+  /// toda mudança de [orders] — PATCH nosso, evento do canal ou recarga.
+  void _syncReminder() {
+    if (_hasUnconfirmed.value && _remindersOn) {
+      _reminder ??= Timer.periodic(
+        newOrderReminderInterval,
+        (_) => _alert.play(),
+      );
+    } else {
+      _reminder?.cancel();
+      _reminder = null;
+    }
+  }
+
+  void _restartReminder() {
+    _reminder?.cancel();
+    _reminder = null;
+    _syncReminder();
   }
 
   /// O PATCH devolve o pedido atualizado, então dá para mexer só nele em vez
@@ -263,6 +316,8 @@ class HomeController {
   }
 
   void dispose() {
+    _reminderEffect();
+    _reminder?.cancel();
     _realtime.dispose();
     isLoading.dispose();
     loadError.dispose();
@@ -272,5 +327,6 @@ class HomeController {
     printingIds.dispose();
     activeOrders.dispose();
     homeStats.dispose();
+    _hasUnconfirmed.dispose();
   }
 }
