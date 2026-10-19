@@ -49,6 +49,22 @@ class MenuService {
     return Category.fromJson(json as Map<String, dynamic>);
   }
 
+  /// Troca a ordem com a vizinha: [forward] = vai para depois (`FRENTE`),
+  /// senão para antes (`TRAS`). Devolve a lista inteira já reordenada; na
+  /// ponta o servidor não faz nada e devolve a lista como está.
+  Future<List<Category>> moveCategory(
+    String id, {
+    required bool forward,
+  }) async {
+    final json = await _api.patch(
+      '/admin/categorias/$id/mover',
+      body: {'direcao': forward ? 'FRENTE' : 'TRAS'},
+    );
+    return (json as List)
+        .map((e) => Category.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<List<Addition>> listCategoryAdditions(String categoryId) async {
     final json = await _api.get('/admin/categorias/$categoryId/adicionais');
     return (json as List)

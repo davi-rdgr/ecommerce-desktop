@@ -203,6 +203,48 @@ class MenuController {
         );
       });
 
+  /// Move a categoria uma posição para depois ([forward]) ou para antes.
+  ///
+  /// A troca aparece na hora (otimista) e a resposta do servidor vira a
+  /// verdade. Se falhar, a ordem antiga volta. Uma chave só para todas as
+  /// categorias: dois cliques rápidos não podem cruzar respostas.
+  Future<String?> moveCategory(Category category, {required bool forward}) {
+    final previous = categories.value;
+    final index = previous.indexWhere((c) => c.id == category.id);
+    final neighbor = forward ? index + 1 : index - 1;
+    if (index < 0 || neighbor < 0 || neighbor >= previous.length) {
+      return Future.value(null);
+    }
+
+    return _run('category-order', () async {
+      final other = previous[neighbor];
+      categories.value = [...previous]
+        ..[index] = other.copyWith(
+          order: category.order,
+          imageUrl: other.imageUrl,
+        )
+        ..[neighbor] = category.copyWith(
+          order: other.order,
+          imageUrl: category.imageUrl,
+        );
+
+      try {
+        categories.value = (await _service.moveCategory(
+          category.id,
+          forward: forward,
+        ))..sort(_byOrderThenName);
+      } catch (_) {
+        categories.value = previous;
+        rethrow;
+      }
+    });
+  }
+
+  static int _byOrderThenName(Category a, Category b) {
+    final byOrder = a.order.compareTo(b.order);
+    return byOrder != 0 ? byOrder : a.name.compareTo(b.name);
+  }
+
   void _upsertCategory(Category category) {
     final current = categories.value;
     final index = current.indexWhere((c) => c.id == category.id);

@@ -137,6 +137,7 @@ class _MenuViewState extends State<MenuView> {
     }
 
     final selected = _controller.selectedCategory.value;
+    final selectedIndex = categories.indexWhere((c) => c.id == selected?.id);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -175,6 +176,15 @@ class _MenuViewState extends State<MenuView> {
                         onEditCategory: () => _editCategory(selected),
                         onToggleActive: () async => _report(
                           await _controller.toggleCategoryActive(selected),
+                        ),
+                        canMoveBack: selectedIndex > 0,
+                        canMoveForward: selectedIndex >= 0 &&
+                            selectedIndex < categories.length - 1,
+                        onMove: (forward) async => _report(
+                          await _controller.moveCategory(
+                            selected,
+                            forward: forward,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -376,6 +386,12 @@ class _ItemsCard extends StatelessWidget {
   final VoidCallback onEditCategory;
   final VoidCallback onToggleActive;
 
+  /// Setas de ordem: mexem na posição da aba, que é a mesma ordem do
+  /// cardápio do cliente. Desabilitadas na ponta.
+  final bool canMoveBack;
+  final bool canMoveForward;
+  final void Function(bool forward) onMove;
+
   const _ItemsCard({
     required this.category,
     required this.products,
@@ -386,6 +402,9 @@ class _ItemsCard extends StatelessWidget {
     required this.onNew,
     required this.onEditCategory,
     required this.onToggleActive,
+    required this.canMoveBack,
+    required this.canMoveForward,
+    required this.onMove,
   });
 
   static final _headerStyle = GoogleFonts.plusJakartaSans(
@@ -398,6 +417,7 @@ class _ItemsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final busy = isPending('category-${category.id}');
+    final moving = isPending('category-order');
 
     return Container(
       decoration: BoxDecoration(
@@ -420,6 +440,23 @@ class _ItemsCard extends StatelessWidget {
                   ),
                 ),
               ),
+              IconButton(
+                onPressed: canMoveBack && !moving ? () => onMove(false) : null,
+                icon: const Icon(Icons.chevron_left, size: 18),
+                tooltip: 'Mover para trás',
+                color: _mutedText,
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
+                onPressed: canMoveForward && !moving
+                    ? () => onMove(true)
+                    : null,
+                icon: const Icon(Icons.chevron_right, size: 18),
+                tooltip: 'Mover para frente',
+                color: _mutedText,
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 4),
               TextButton.icon(
                 onPressed: busy ? null : onEditCategory,
                 icon: const Icon(Icons.edit_outlined, size: 15),

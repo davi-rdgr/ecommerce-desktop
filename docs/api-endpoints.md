@@ -396,6 +396,7 @@ Edição concorrente (dois atendentes) → `409 {"error":"O pedido foi modificad
 | `POST` | `/admin/categorias` | `CategoriaRequest` | 200 `CategoriaResponse` |
 | `PUT` | `/admin/categorias/{id}` | `CategoriaRequest` | 200 `CategoriaResponse` |
 | `PATCH` | `/admin/categorias/{id}/ativo` | `{"ativo": false}` | 200 `CategoriaResponse` |
+| `PATCH` | `/admin/categorias/{id}/mover` | `{"direcao": "FRENTE"}` ou `"TRAS"` | 200 `CategoriaResponse[]` (lista inteira, já reordenada; na ponta é no-op) |
 | `PUT` | `/admin/categorias/{id}/adicionais` | `VincularAdicionaisRequest` | 200 `CategoriaComAdicionaisResponse` |
 | `GET` | `/admin/categorias/{id}/adicionais` | — | `AdicionalResponse[]` (ordenado por nome) |
 
