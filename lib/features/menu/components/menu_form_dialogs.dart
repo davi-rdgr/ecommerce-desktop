@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:romeu_lanches_admin/core/format/currency.dart';
 import 'package:romeu_lanches_admin/models/addition.dart';
+import 'package:romeu_lanches_admin/models/category.dart';
 import 'package:romeu_lanches_admin/models/product.dart';
 
 const _darkBrown = Color(0xFF2A1F17);
@@ -34,14 +35,15 @@ Future<({String name, double price})?> showAdditionFormDialog(
   );
 }
 
-/// Nome de categoria. Devolve o nome, ou `null` se cancelado.
-Future<String?> showCategoryNameDialog(
+/// Formulário de categoria. Devolve `(name, imageUrl)` — `imageUrl` `null`
+/// quando o campo fica vazio —, ou `null` se cancelado.
+Future<({String name, String? imageUrl})?> showCategoryFormDialog(
   BuildContext context, {
-  String? currentName,
+  Category? category,
 }) {
-  return showDialog<String>(
+  return showDialog<({String name, String? imageUrl})>(
     context: context,
-    builder: (_) => _CategoryNameDialog(currentName: currentName),
+    builder: (_) => _CategoryFormDialog(category: category),
   );
 }
 
@@ -62,7 +64,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   late final TextEditingController _name;
   late final TextEditingController _description;
   late final TextEditingController _price;
-  late final TextEditingController _imageUrl;
   late final TextEditingController _order;
 
   Product? get _product => widget.product;
@@ -75,7 +76,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _price = TextEditingController(
       text: _product == null ? '' : brlAmount(_product!.price),
     );
-    _imageUrl = TextEditingController(text: _product?.imageUrl ?? '');
     _order = TextEditingController(text: (_product?.order ?? 0).toString());
   }
 
@@ -84,7 +84,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _name.dispose();
     _description.dispose();
     _price.dispose();
-    _imageUrl.dispose();
     _order.dispose();
     super.dispose();
   }
@@ -103,7 +102,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         description: text(_description).isEmpty ? null : text(_description),
         price: parseBrl(_price.text)!,
         available: _product?.available ?? true,
-        imageUrl: text(_imageUrl).isEmpty ? null : text(_imageUrl),
+        // A imagem agora é por categoria; o formulário não edita mais a do
+        // item, só repassa a que já existe para o PUT não apagá-la.
+        imageUrl: _product?.imageUrl,
         order: int.tryParse(text(_order)) ?? 0,
       ),
     );
@@ -148,18 +149,9 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                 const SizedBox(width: 12),
                 SizedBox(
                   width: 110,
-                  child: _Field(
-                    label: 'Ordem',
-                    controller: _order,
-                    hint: '0',
-                  ),
+                  child: _Field(label: 'Ordem', controller: _order, hint: '0'),
                 ),
               ],
-            ),
-            _Field(
-              label: 'URL da imagem',
-              controller: _imageUrl,
-              hint: 'https://…  (a API não faz upload, só guarda o link)',
             ),
             if (_product != null)
               Padding(
@@ -264,49 +256,80 @@ class _AdditionFormDialogState extends State<_AdditionFormDialog> {
 
 // ─── Categoria ────────────────────────────────────────────────────────────────
 
-class _CategoryNameDialog extends StatefulWidget {
-  final String? currentName;
+class _CategoryFormDialog extends StatefulWidget {
+  final Category? category;
 
-  const _CategoryNameDialog({this.currentName});
+  const _CategoryFormDialog({this.category});
 
   @override
-  State<_CategoryNameDialog> createState() => _CategoryNameDialogState();
+  State<_CategoryFormDialog> createState() => _CategoryFormDialogState();
 }
 
-class _CategoryNameDialogState extends State<_CategoryNameDialog> {
+class _CategoryFormDialogState extends State<_CategoryFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
+  late final TextEditingController _imageUrl;
 
   @override
   void initState() {
     super.initState();
-    _name = TextEditingController(text: widget.currentName ?? '');
+    _name = TextEditingController(text: widget.category?.name ?? '');
+    _imageUrl = TextEditingController(text: widget.category?.imageUrl ?? '');
   }
 
   @override
   void dispose() {
     _name.dispose();
+    _imageUrl.dispose();
     super.dispose();
   }
 
   void _submit() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    Navigator.of(context).pop(_name.text.trim());
+    final imageUrl = _imageUrl.text.trim();
+    Navigator.of(context).pop((
+      name: _name.text.trim(),
+      imageUrl: imageUrl.isEmpty ? null : imageUrl,
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
     return _FormShell(
-      title: widget.currentName == null ? 'Nova categoria' : 'Renomear categoria',
+      title: widget.category == null ? 'Nova categoria' : 'Editar categoria',
       onSubmit: _submit,
       child: Form(
         key: _formKey,
-        child: _Field(
-          label: 'Nome',
-          controller: _name,
-          autofocus: true,
-          hint: 'Lanches, Bebidas…',
-          validator: (v) => (v ?? '').trim().isEmpty ? 'Informe o nome.' : null,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Field(
+              label: 'Nome',
+              controller: _name,
+              autofocus: true,
+              hint: 'Lanches, Bebidas…',
+              validator: (v) =>
+                  (v ?? '').trim().isEmpty ? 'Informe o nome.' : null,
+            ),
+            _Field(
+              label: 'URL da imagem',
+              controller: _imageUrl,
+              hint: 'https://…  (a API não faz upload, só guarda o link)',
+              // Limite da coluna no backend; acima disso a API devolve 400.
+              validator: (v) => (v ?? '').trim().length > 500
+                  ? 'URL muito longa (máx. 500 caracteres).'
+                  : null,
+            ),
+            Text(
+              'Opcional. A imagem vale para todos os itens da categoria.',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                color: _mutedText,
+                height: 1.35,
+              ),
+            ),
+          ],
         ),
       ),
     );

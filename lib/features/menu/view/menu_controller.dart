@@ -177,14 +177,19 @@ class MenuController {
 
   // ─── Categorias ─────────────────────────────────────────────────────────
 
-  Future<String?> createCategory(String name) => _run('category-new', () async {
-    final order = categories.value.isEmpty
-        ? 1
-        : categories.value.map((c) => c.order).reduce((a, b) => a > b ? a : b) + 1;
-    final created = await _service.createCategory(name, order);
-    _upsertCategory(created);
-    await selectCategory(created.id);
-  });
+  Future<String?> createCategory(String name, {String? imageUrl}) =>
+      _run('category-new', () async {
+        final order = categories.value.isEmpty
+            ? 1
+            : categories.value.map((c) => c.order).reduce((a, b) => a > b ? a : b) + 1;
+        final created = await _service.createCategory(
+          name,
+          order,
+          imageUrl: imageUrl,
+        );
+        _upsertCategory(created);
+        await selectCategory(created.id);
+      });
 
   Future<String?> saveCategory(Category category) =>
       _run('category-${category.id}', () async {

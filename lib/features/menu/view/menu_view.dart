@@ -52,18 +52,21 @@ class _MenuViewState extends State<MenuView> {
   // ─── Ações ──────────────────────────────────────────────────────────────
 
   Future<void> _newCategory() async {
-    final name = await showCategoryNameDialog(context);
-    if (name == null) return;
-    _report(await _controller.createCategory(name));
+    final data = await showCategoryFormDialog(context);
+    if (data == null) return;
+    _report(
+      await _controller.createCategory(data.name, imageUrl: data.imageUrl),
+    );
   }
 
-  Future<void> _renameCategory(Category category) async {
-    final name = await showCategoryNameDialog(
-      context,
-      currentName: category.name,
+  Future<void> _editCategory(Category category) async {
+    final data = await showCategoryFormDialog(context, category: category);
+    if (data == null) return;
+    _report(
+      await _controller.saveCategory(
+        category.copyWith(name: data.name, imageUrl: data.imageUrl),
+      ),
     );
-    if (name == null) return;
-    _report(await _controller.saveCategory(category.copyWith(name: name)));
   }
 
   Future<void> _newProduct(String categoryId) async {
@@ -169,7 +172,7 @@ class _MenuViewState extends State<MenuView> {
                         ),
                         onEdit: _editProduct,
                         onNew: () => _newProduct(selected.id),
-                        onRename: () => _renameCategory(selected),
+                        onEditCategory: () => _editCategory(selected),
                         onToggleActive: () async => _report(
                           await _controller.toggleCategoryActive(selected),
                         ),
@@ -370,7 +373,7 @@ class _ItemsCard extends StatelessWidget {
   final void Function(Product, double) onSavePrice;
   final void Function(Product) onEdit;
   final VoidCallback onNew;
-  final VoidCallback onRename;
+  final VoidCallback onEditCategory;
   final VoidCallback onToggleActive;
 
   const _ItemsCard({
@@ -381,7 +384,7 @@ class _ItemsCard extends StatelessWidget {
     required this.onSavePrice,
     required this.onEdit,
     required this.onNew,
-    required this.onRename,
+    required this.onEditCategory,
     required this.onToggleActive,
   });
 
@@ -418,9 +421,9 @@ class _ItemsCard extends StatelessWidget {
                 ),
               ),
               TextButton.icon(
-                onPressed: busy ? null : onRename,
+                onPressed: busy ? null : onEditCategory,
                 icon: const Icon(Icons.edit_outlined, size: 15),
-                label: const Text('Renomear'),
+                label: const Text('Editar'),
                 style: TextButton.styleFrom(foregroundColor: _mutedText),
               ),
               TextButton.icon(
@@ -484,6 +487,7 @@ class _ItemsCard extends StatelessWidget {
               _ProductRow(
                 key: ValueKey(products[i].id),
                 product: products[i],
+                imageUrl: category.imageUrl,
                 isBusy: isPending('product-${products[i].id}'),
                 onToggleAvailable: () => onToggleAvailable(products[i]),
                 onSavePrice: (price) => onSavePrice(products[i], price),
@@ -502,6 +506,9 @@ class _ItemsCard extends StatelessWidget {
 
 class _ProductRow extends StatefulWidget {
   final Product product;
+
+  /// Imagem da categoria do produto — a imagem por item foi descontinuada.
+  final String? imageUrl;
   final bool isBusy;
   final VoidCallback onToggleAvailable;
   final void Function(double price) onSavePrice;
@@ -510,6 +517,7 @@ class _ProductRow extends StatefulWidget {
   const _ProductRow({
     super.key,
     required this.product,
+    required this.imageUrl,
     required this.isBusy,
     required this.onToggleAvailable,
     required this.onSavePrice,
@@ -573,7 +581,7 @@ class _ProductRowState extends State<_ProductRow> {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          _ProductThumb(imageUrl: product.imageUrl),
+          _ProductThumb(imageUrl: widget.imageUrl),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -683,15 +691,33 @@ class _ProductThumb extends StatelessWidget {
       child: SizedBox(
         width: 46,
         height: 46,
-        child: url == null || url.isEmpty
-            ? CustomPaint(painter: _StripesPainter())
+        child: url == null || url.trim().isEmpty
+            ? const _ThumbPlaceholder()
             : Image.network(
-                url,
+                url.trim(),
                 fit: BoxFit.cover,
-                // Link quebrado é comum quando a URL é digitada à mão.
-                errorBuilder: (_, _, _) =>
-                    CustomPaint(painter: _StripesPainter()),
+                // Link quebrado é comum quando a URL é colada à mão.
+                errorBuilder: (_, _, _) => const _ThumbPlaceholder(),
               ),
+      ),
+    );
+  }
+}
+
+/// Categoria sem imagem (ou com link quebrado): listras + ícone genérico.
+class _ThumbPlaceholder extends StatelessWidget {
+  const _ThumbPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _StripesPainter(),
+      child: const Center(
+        child: Icon(
+          Icons.fastfood_outlined,
+          size: 20,
+          color: Color(0xFFB5A090),
+        ),
       ),
     );
   }

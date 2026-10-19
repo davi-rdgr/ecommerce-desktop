@@ -17,10 +17,18 @@ class MenuService {
         .toList();
   }
 
-  Future<Category> createCategory(String name, int order) async {
+  Future<Category> createCategory(
+    String name,
+    int order, {
+    String? imageUrl,
+  }) async {
     final json = await _api.post(
       '/admin/categorias',
-      body: {'nome': name, 'ordem': order},
+      body: {
+        'nome': name,
+        'ordem': order,
+        if (imageUrl != null && imageUrl.isNotEmpty) 'imagemUrl': imageUrl,
+      },
     );
     return Category.fromJson(json as Map<String, dynamic>);
   }
